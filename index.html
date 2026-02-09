@@ -1,0 +1,183 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Time Burner | Efficiency System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@100..900&family=Geist+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --grid: 8px;
+        }
+        html {
+            font-size: 8px; /* 1rem = 8px */
+        }
+        body {
+            background-color: #020202;
+            color: #ffffff;
+            font-family: 'Onest', sans-serif;
+            font-weight: 500;
+            font-size: 2rem; /* 16px body text */
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+        .font-mono {
+            font-family: 'Geist Mono', monospace;
+        }
+        
+        /* TYPOGRAPHY SYSTEM */
+        
+        /* 48px - Display / Clock / Hero Numbers */
+        .type-display {
+            font-size: 6rem; 
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1;
+        }
+
+        /* 32px - Page Titles */
+        .type-h1 {
+            font-size: 4rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+
+        /* 24px - Section Headers / Card Titles */
+        .type-h2 {
+            font-size: 3rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+
+        /* 20px - Item Titles / Inputs / Buttons */
+        .type-h3 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            line-height: 1.3;
+        }
+
+        /* 16px - Body Text */
+        .type-body {
+            font-size: 2rem;
+            font-weight: 500;
+            letter-spacing: 0;
+            line-height: 1.5;
+        }
+
+        /* 14px - Description / Tooltips */
+        .type-description {
+            font-size: 1.75rem;
+            font-weight: 500;
+            line-height: 1.4;
+            letter-spacing: 0;
+        }
+
+        /* 12px - Labels / Tags / Uppercase UI */
+        .type-label {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        /* 10px - Captions / Tiny Metadata */
+        .type-caption {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        /* MONOSPACE VARIANTS */
+        .type-mono-display {
+            font-family: 'Geist Mono', monospace;
+            font-size: 6rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1;
+        }
+        
+        .type-mono-h2 {
+            font-family: 'Geist Mono', monospace;
+            font-size: 3rem; /* 24px */
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            line-height: 1;
+        }
+
+        .type-mono-body {
+            font-family: 'Geist Mono', monospace;
+            font-size: 2rem; /* 16px */
+            font-weight: 600;
+            line-height: 1;
+        }
+        
+        .type-mono-sm {
+            font-family: 'Geist Mono', monospace;
+            font-size: 1.5rem; /* 12px */
+            font-weight: 700;
+        }
+
+        /* UTILS */
+        
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .glitch-red {
+          animation: glitch-red 0.5s infinite;
+          background: rgba(220, 38, 38, 0.05);
+        }
+
+        @keyframes glitch-red {
+          0% { transform: translate(0) }
+          20% { transform: translate(-1px, 1px) }
+          40% { transform: translate(-1px, -1px) }
+          60% { transform: translate(2px, 2px) }
+          80% { transform: translate(2px, -2px) }
+          100% { transform: translate(0) }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+          display: block;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 4px;
+        }
+        
+        .no-select {
+          user-select: none;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "framer-motion": "https://esm.sh/framer-motion@^12.33.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "zustand/": "https://esm.sh/zustand@^5.0.11/",
+    "zustand": "https://esm.sh/zustand@^5.0.11"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>

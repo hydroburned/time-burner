@@ -1,0 +1,469 @@
+
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { Plus, BookTemplate, Info, AlertTriangle, Menu } from 'lucide-react';
+import { useStore } from './store';
+import { Navigation } from './components/Navigation';
+import { TimeCircle } from './components/TimeCircle';
+import { EnergyTank } from './components/EnergyTank';
+import { SlotList } from './components/SlotList';
+import { WeekView } from './components/Views/WeekView';
+import { MonthView } from './components/Views/MonthView';
+import { SettingsView } from './components/Views/SettingsView';
+import { ProtocolManager } from './components/Views/TemplateManager';
+import { Onboarding } from './components/Onboarding';
+import { Activity, ActivityDefinition } from './types';
+import { getComputedActivities } from './utils';
+import { Button } from './components/UI';
+import { DateHeader } from './components/DateHeader';
+import { ProtocolContextMenu } from './components/ProtocolContextMenu';
+import { ActivityEditor } from './components/ActivityEditor';
+import { ConfirmationModal } from './components/ConfirmationModal';
+import { Logbook } from './components/Logbook';
+import { BottomSheet } from './components/BottomSheet';
+
+const App: React.FC = () => {
+  const { 
+    view, energy, selectedDate, days, protocols, 
+    addActivityToProtocol, updateActivityInProtocol, removeActivityFromProtocol, 
+    userConfig, setView, setReturnView, setSelectedDate 
+  } = useStore();
+  
+  // Editor State
+  const [showEditor, setShowEditor] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  
+  // Delete State
+  const [deleteActivityConfirm, setDeleteActivityConfirm] = useState<{ isOpen: boolean; id: string }>({
+    isOpen: false,
+    id: ''
+  });
+  
+  // Context Sheet State (Mobile)
+  const [activeSheetActivity, setActiveSheetActivity] = useState<Activity | null>(null);
+
+  // Interaction State
+  const [hoveredActivityId, setHoveredActivityId] = useState<string | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [showProtocolMenu, setShowProtocolMenu] = useState(false);
+  const [menuCoords, setMenuCoords] = useState<{x: number, y: number} | null>(null);
+  
+  // Mobile / Scroll State
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+  
+  // Uses window scroll by default if no container ref is passed
+  const { scrollY } = useScroll(); 
+
+  // Header Animation: Fade IN the sticky header when we scroll past the clock (approx 300px)
+  const miniHeaderOpacity = useTransform(scrollY, [250, 350], [0, 1]);
+  const miniHeaderY = useTransform(scrollY, [250, 350], [-20, 0]);
+  const miniHeaderPointerEvents = useTransform(scrollY, (value) => value > 300 ? 'auto' : 'none');
+
+  const isBurnout = energy < 20;
+
+  // Derive current Protocol info
+  const currentDayState = days[selectedDate];
+  const currentProtocolId = currentDayState?.protocolId;
+  const currentProtocolName = useMemo(() => {
+    if (!currentProtocolId) return null;
+    return protocols.find(p => p.id === currentProtocolId)?.name;
+  }, [currentProtocolId, protocols]);
+
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+      const timer = setInterval(() => setNow(new Date()), 60000);
+      return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Keyboard Navigation for Dates
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If editor is open, don't navigate dates
+      if (showEditor) return;
+      
+      // If typing, don't navigate
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+      if (e.key === 'ArrowLeft') {
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() - 1);
+        setSelectedDate(d.toISOString().split('T')[0]);
+      }
+      if (e.key === 'ArrowRight') {
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() + 1);
+        setSelectedDate(d.toISOString().split('T')[0]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showEditor, selectedDate]);
+
+  // Reset selected activity when date changes
+  useEffect(() => {
+    setSelectedActivityId(null);
+  }, [selectedDate]);
+
+  const currentActivities = useMemo(() => {
+    return getComputedActivities(days, protocols, selectedDate);
+  }, [days, protocols, selectedDate]);
+  
+  const selectedActivity = useMemo(() => 
+    currentActivities.find(a => a.id === selectedActivityId) || null
+  , [currentActivities, selectedActivityId]);
+
+  if (!userConfig.onboardingComplete) {
+    return <Onboarding />;
+  }
+
+  // --- Handlers ---
+
+  const openInject = (activity: Activity | null = null, e?: React.MouseEvent) => {
+    // Cannot edit virtual slots
+    if (activity && activity.id.startsWith('virtual-')) return;
+    
+    // If no protocol, warn or prompt user
+    if (!currentProtocolId) {
+        setMenuCoords(e ? { x: e.clientX, y: e.clientY } : null);
+        setShowProtocolMenu(true);
+        return;
+    }
+    
+    setEditingActivity(activity);
+    setShowEditor(true);
+  };
+
+  const handleSaveActivity = (def: ActivityDefinition) => {
+    if (!currentProtocolId) return;
+
+    // Preserve the ID if editing, or create new if adding
+    const finalDef = {
+      ...def,
+      id: editingActivity?.id || crypto.randomUUID()
+    };
+
+    if (editingActivity) {
+      updateActivityInProtocol(currentProtocolId, finalDef);
+    } else {
+      addActivityToProtocol(currentProtocolId, finalDef);
+    }
+    setShowEditor(false);
+  };
+
+  const handleClickDeleteActivity = (id: string) => {
+     if (!currentProtocolId || !id) return;
+     setDeleteActivityConfirm({ isOpen: true, id });
+  };
+
+  const executeDeleteActivity = () => {
+    if (currentProtocolId && deleteActivityConfirm.id) {
+        removeActivityFromProtocol(currentProtocolId, deleteActivityConfirm.id);
+        setShowEditor(false);
+    }
+  };
+
+  const toggleProtocolMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuCoords({ x: e.clientX, y: e.clientY });
+    setShowProtocolMenu(!showProtocolMenu);
+  };
+
+  
+  const handleSlotSelect = (id: string) => {
+     setSelectedActivityId(prev => prev === id ? null : id);
+  };
+  
+  const handleSlotEdit = (a: Activity) => {
+     openInject(a);
+  };
+  
+  const handleCircleSelect = (a: Activity) => {
+    handleSlotSelect(a.id);
+  }
+
+  const handleOpenSheet = (a: Activity) => {
+      setActiveSheetActivity(a);
+  };
+
+  // --- Views Renders ---
+
+  const renderMobileDayView = () => (
+    // Default window scrolling behavior
+    <div className="flex flex-col min-h-screen bg-[#020202]">
+       
+       {/* STICKY MINI HEADER */}
+       {/* It sits on top but is hidden/transparent until scroll */}
+       <motion.div 
+         style={{ opacity: miniHeaderOpacity, y: miniHeaderY, pointerEvents: miniHeaderPointerEvents }}
+         className="fixed top-0 left-0 right-0 z-40 bg-black/90 backdrop-blur-md border-b border-white/10 px-6 py-4 pt-safe-top flex items-center justify-between"
+       >
+          <div className="flex flex-col">
+             <span className="type-label text-zinc-500">Active Protocol</span>
+             <span className="type-h3 text-white truncate max-w-[200px]">{currentProtocolName || 'No Protocol'}</span>
+          </div>
+          <span className="type-mono-body text-cyan-400">
+             {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+          </span>
+       </motion.div>
+
+       {/* SCROLLABLE CONTENT START */}
+       
+       {/* 1. Large Header & Clock (Scrolls naturally) */}
+       <div className="w-full flex flex-col gap-8 px-4 pt-8 pb-12 bg-[#020202]">
+            <DateHeader />
+            
+            <div className="flex justify-center my-4">
+                <TimeCircle 
+                    activities={currentActivities} 
+                    onSelectSlot={handleCircleSelect} 
+                    size={300}
+                    hoveredId={hoveredActivityId}
+                    onHover={setHoveredActivityId}
+                    selectedDate={selectedDate}
+                />
+            </div>
+       </div>
+
+       {/* 2. List Area (Scrolls naturally below clock) */}
+       <div className="bg-[#020202] relative z-30 px-4 pb-40">
+            {/* List Controls */}
+            <div className="flex items-center justify-between px-2 mb-6">
+                <h3 className="type-h2 text-white">Protocol</h3>
+                <div className="flex gap-4">
+                    <Button 
+                    size="icon" 
+                    variant="secondary" 
+                    onClick={toggleProtocolMenu}
+                    icon={<BookTemplate />}
+                    />
+                    <Button 
+                    size="icon" 
+                    variant="primary" 
+                    onClick={(e) => openInject(null, e)}
+                    icon={<Plus />}
+                    />
+                </div>
+            </div>
+
+            {/* Slot List */}
+            {currentProtocolName ? (
+                <SlotList 
+                activities={currentActivities} 
+                selectedDate={selectedDate}
+                onEdit={handleSlotEdit}
+                onHover={setHoveredActivityId}
+                hoveredId={hoveredActivityId}
+                selectedId={selectedActivityId}
+                onSelect={handleSlotSelect}
+                onOpenContext={handleOpenSheet} // Passed for Sheet, but List handles interactions now
+                />
+            ) : (
+                <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-zinc-800 rounded-[3rem] bg-zinc-900/20">
+                    <AlertTriangle className="w-16 h-16 text-zinc-700 mb-6" />
+                    <h3 className="type-body text-zinc-500 uppercase mb-4">No Signal</h3>
+                    <Button size="md" variant="secondary" onClick={(e) => toggleProtocolMenu(e)}>Assign Protocol</Button>
+                </div>
+            )}
+       </div>
+
+       {/* MOBILE MENUS */}
+       <ProtocolContextMenu 
+          isOpen={showProtocolMenu} 
+          onClose={() => setShowProtocolMenu(false)} 
+          targetDate={selectedDate}
+          coords={menuCoords}
+        />
+    </div>
+  );
+
+  const renderDesktopDayView = () => (
+     <motion.div
+        key="day-view"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="flex flex-row h-screen overflow-hidden w-full gap-0"
+      >
+        {/* LEFT COLUMN */}
+        <div className="flex flex-col relative z-10 w-[50rem] shrink-0 h-full py-12 bg-transparent justify-between border-r border-white/5">
+           <div className="w-full px-8 z-50">
+              <DateHeader />
+           </div>
+
+           <div className="flex items-start justify-center relative mt-[5rem] mb-20 flex-1">
+             <div className="relative">
+                <div className="absolute inset-0 bg-cyan-500/5 blur-[100px] rounded-full pointer-events-none" />
+                <TimeCircle 
+                  activities={currentActivities} 
+                  onSelectSlot={handleCircleSelect} 
+                  size={360}
+                  hoveredId={hoveredActivityId}
+                  onHover={setHoveredActivityId}
+                  selectedDate={selectedDate}
+                />
+             </div>
+           </div>
+
+           <div className="w-full px-8 mt-auto">
+             <EnergyTank currentEnergy={energy} />
+           </div>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div className="flex-1 w-full h-full flex flex-row bg-[#020202]">
+          <div className="flex-1 flex flex-col h-full border-r border-white/5 min-w-0 relative">
+              {/* Header */}
+              <div className="px-8 pt-12 pb-8 shrink-0 bg-[#020202] z-20 border-b border-white/5">
+                <div className="flex flex-wrap items-center justify-between gap-4 min-h-[48px]">
+                    <div className="flex flex-col justify-center min-w-0">
+                      <h3 className="type-h1 text-white truncate leading-none mb-2">Protocol</h3>
+                      {currentProtocolName ? (
+                        <span className="type-mono-sm text-zinc-500 truncate block">{currentProtocolName}</span>
+                      ) : (
+                        <span className="type-mono-sm text-zinc-600 animate-pulse block">NO PROTOCOL</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-4 relative">
+                      <div className="relative">
+                        <Button 
+                          variant={!currentProtocolName ? 'primary' : 'secondary'} 
+                          size="md"
+                          onClick={toggleProtocolMenu} 
+                          icon={<BookTemplate />} 
+                          className={showProtocolMenu ? 'bg-zinc-800 text-white' : ''}
+                        >
+                            {!currentProtocolName && "Select"}
+                        </Button>
+                        
+                        <ProtocolContextMenu 
+                          isOpen={showProtocolMenu} 
+                          onClose={() => setShowProtocolMenu(false)} 
+                          targetDate={selectedDate}
+                          coords={menuCoords}
+                        />
+                      </div>
+
+                      <Button 
+                        variant="primary" 
+                        size="md"
+                        onClick={(e) => openInject(null, e)} 
+                        icon={<Plus />}
+                        disabled={!currentProtocolId}
+                      >
+                        Inject
+                      </Button>
+                    </div>
+                  </div>
+              </div>
+
+              {/* SLOT LIST */}
+              <div className="flex-1 overflow-y-auto px-8 py-8 custom-scrollbar">
+                  {currentProtocolName ? (
+                    <SlotList 
+                      activities={currentActivities} 
+                      selectedDate={selectedDate}
+                      onEdit={handleSlotEdit}
+                      onHover={setHoveredActivityId}
+                      hoveredId={hoveredActivityId}
+                      selectedId={selectedActivityId}
+                      onSelect={handleSlotSelect}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-zinc-800 rounded-[3rem] bg-zinc-900/20">
+                       <AlertTriangle className="w-16 h-16 text-zinc-700 mb-6" />
+                       <h3 className="type-body text-zinc-500 uppercase mb-4">No Signal</h3>
+                       <Button size="md" variant="secondary" onClick={(e) => toggleProtocolMenu(e)}>Assign Protocol</Button>
+                    </div>
+                  )}
+              </div>
+          </div>
+
+          <div className="flex-none w-[50rem] h-full min-w-0">
+              <Logbook selectedDate={selectedDate} selectedActivity={selectedActivity} />
+          </div>
+        </div>
+      </motion.div>
+  );
+
+  const renderView = () => {
+    switch (view) {
+      case 'WEEK': return <div className="p-0 md:p-8 lg:p-16 h-full overflow-y-auto"><WeekView /></div>;
+      case 'MONTH': return <div className="p-0 md:p-8 lg:p-16 h-full overflow-y-auto"><MonthView /></div>;
+      case 'SETTINGS': return <div className="h-full overflow-hidden"><SettingsView /></div>;
+      case 'PROTOCOLS': return <div className="p-0 md:p-8 lg:p-16 h-full overflow-hidden"><ProtocolManager /></div>;
+      case 'DAY':
+      default:
+        return isMobile ? renderMobileDayView() : renderDesktopDayView();
+    }
+  };
+
+  return (
+    <div className={`flex flex-col transition-colors duration-700 ${isBurnout ? 'glitch-red' : ''} bg-[#020202]`}>
+      <main className="flex-1 w-full relative min-h-screen">
+        <AnimatePresence mode="wait">
+          <motion.div
+             key={view}
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             transition={{ duration: 0.2 }}
+             className="min-h-screen"
+          >
+            {renderView()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+      
+      <Navigation />
+
+      <AnimatePresence>
+        {showEditor && (
+          <ActivityEditor 
+            isOpen={showEditor}
+            onClose={() => setShowEditor(false)}
+            initialActivity={editingActivity}
+            onSave={handleSaveActivity}
+            onDelete={handleClickDeleteActivity}
+            protocolName={currentProtocolName || ''}
+            mode="modal" 
+          />
+        )}
+      </AnimatePresence>
+
+      <ConfirmationModal 
+        isOpen={deleteActivityConfirm.isOpen}
+        onClose={() => setDeleteActivityConfirm({ ...deleteActivityConfirm, isOpen: false })}
+        onConfirm={executeDeleteActivity}
+        title="Delete Slot?"
+        message="Are you sure you want to delete this slot? This will affect every day using this protocol."
+        confirmLabel="Delete"
+        isDangerous
+      />
+
+      {/* MOBILE BOTTOM SHEET FOR LOGBOOK */}
+      <BottomSheet
+         isOpen={!!activeSheetActivity}
+         onClose={() => setActiveSheetActivity(null)}
+         // Don't pass title to avoid duplication, the Logbook handles it nicely
+         title={null} 
+      >
+         <div className="pb-8 h-full">
+            <Logbook 
+                selectedDate={selectedDate} 
+                selectedActivity={activeSheetActivity} 
+            />
+         </div>
+      </BottomSheet>
+    </div>
+  );
+};
+
+export default App;

@@ -1,0 +1,101 @@
+
+import { DayState, Activity, Protocol, ActivityDefinition } from './types';
+
+export const timeToMinutes = (time: string): number => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+export const minutesToTime = (totalMinutes: number): string => {
+  const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};
+
+export const getEndTime = (startTime: string, duration: number): string => {
+  const startMins = timeToMinutes(startTime);
+  return minutesToTime(startMins + duration);
+};
+
+export const getDayId = (date: Date): string => {
+  // Use Local Time instead of UTC (toISOString) to ensure "Today" stays "Today" past midnight locally
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+  return localDate.toISOString().split('T')[0];
+};
+
+export const getPreviousDayId = (dateId: string): string => {
+  const d = new Date(dateId);
+  d.setDate(d.getDate() - 1);
+  return getDayId(d); // Use the safe getDayId
+};
+
+export const isActivityInFuture = (dateId: string, startTime: string): boolean => {
+  const now = new Date();
+  const todayId = getDayId(now);
+  
+  if (dateId > todayId) return true;
+  if (dateId < todayId) return false;
+  
+  // It's today, check time
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const slotMinutes = timeToMinutes(startTime);
+  
+  return slotMinutes > currentMinutes;
+};
+
+/**
+ * CORE LOGIC: Merges the Protocol (Structure) with DayState (Completion)
+ */
+export const getComputedActivities = (
+  days: Record<string, DayState>, 
+  protocols: Protocol[], 
+  dateId: string
+): Activity[] => {
+  const activities: Activity[] = [];
+  
+  // 1. Get Activities for Current Day
+  const dayState = days[dateId];
+  
+  // If day has a protocol assigned
+  if (dayState && dayState.protocolId) {
+    const protocol = protocols.find(p => p.id === dayState.protocolId);
+    
+    // Only process if protocol exists (wasn't deleted)
+    if (protocol) {
+       const completedIds = new Set(dayState.completedActivityIds);
+       
+       const currentDayActivities = protocol.activities.map(def => ({
+         ...def,
+         completed: completedIds.has(def.id)
+       }));
+       
+       activities.push(...currentDayActivities);
+    }
+  }
+
+  return activities.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+};
+
+export const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+
+  return {
+    x: centerX + radius * Math.cos(angleInRadians),
+    y: centerY + radius * Math.sin(angleInRadians),
+  };
+};
+
+export const describeArc = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
+  const start = polarToCartesian(x, y, radius, endAngle);
+  const end = polarToCartesian(x, y, radius, startAngle);
+
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+
+  const d = [
+    'M', start.x, start.y,
+    'A', radius, radius, 0, largeArcFlag, 0, end.x, end.y,
+  ].join(' ');
+
+  return d;
+};
