@@ -173,15 +173,21 @@ export const useStore = create<AppState>()(
           name,
           activities
         };
-        set(state => ({
-          protocols: [...state.protocols, newProtocol]
-        }));
+        
+        set(state => {
+           // Simply add to library, DO NOT auto-assign to day
+           const updatedProtocols = [...state.protocols, newProtocol];
+           return { protocols: updatedProtocols };
+        });
+        
+        get().updateEnergy();
       },
 
       updateProtocol: (id: string, updates: Partial<Protocol>) => {
         set(state => ({
           protocols: state.protocols.map(p => p.id === id ? { ...p, ...updates } : p)
         }));
+        get().updateEnergy();
       },
 
       deleteProtocol: (id: string) => {
@@ -197,7 +203,7 @@ export const useStore = create<AppState>()(
                 ...newDays[key], 
                 protocolId: '', 
                 completedActivityIds: [],
-                activityLogs: {}, // Optional: clear logs or keep them? Keeping is safer.
+                activityLogs: {}, 
                 dailyNote: newDays[key].dailyNote,
                 dailyChecklist: newDays[key].dailyChecklist
               };
@@ -206,6 +212,7 @@ export const useStore = create<AppState>()(
 
           return { protocols: newProtocols, days: newDays };
         });
+        get().updateEnergy();
       },
 
       // --- ACTIVITY MANAGEMENT (SYNCED) ---
@@ -289,7 +296,7 @@ export const useStore = create<AppState>()(
       }
     }),
     {
-      name: 'time-burner-storage-v14', // Bumped version again
+      name: 'time-burner-storage-v14', 
       storage: createJSONStorage(() => localStorage),
     }
   )

@@ -2,8 +2,9 @@
 import { DayState, Activity, Protocol, ActivityDefinition } from './types';
 
 export const timeToMinutes = (time: string): number => {
+  if (!time || typeof time !== 'string') return 0;
   const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + minutes;
+  return (hours || 0) * 60 + (minutes || 0);
 };
 
 export const minutesToTime = (totalMinutes: number): string => {
@@ -62,13 +63,16 @@ export const getComputedActivities = (
     const protocol = protocols.find(p => p.id === dayState.protocolId);
     
     // Only process if protocol exists (wasn't deleted)
-    if (protocol) {
+    if (protocol && Array.isArray(protocol.activities)) {
        const completedIds = new Set(dayState.completedActivityIds);
        
-       const currentDayActivities = protocol.activities.map(def => ({
-         ...def,
-         completed: completedIds.has(def.id)
-       }));
+       // Defensive mapping: Ensure activity is valid before processing
+       const currentDayActivities = protocol.activities
+         .filter(def => def && def.id && typeof def.startTime === 'string')
+         .map(def => ({
+           ...def,
+           completed: completedIds.has(def.id)
+         }));
        
        activities.push(...currentDayActivities);
     }
@@ -87,6 +91,9 @@ export const polarToCartesian = (centerX: number, centerY: number, radius: numbe
 };
 
 export const describeArc = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
+  // Protect against NaN or infinite loop scenarios
+  if (isNaN(startAngle) || isNaN(endAngle) || isNaN(radius)) return '';
+  
   const start = polarToCartesian(x, y, radius, endAngle);
   const end = polarToCartesian(x, y, radius, startAngle);
 
