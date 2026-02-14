@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-import { Plus, BookTemplate, Info, AlertTriangle, Menu } from 'lucide-react';
+import { Plus, BookTemplate, Info, AlertTriangle, Menu, Cloud, RefreshCw } from 'lucide-react';
 import { useStore } from './store';
 import { Navigation } from './components/Navigation';
 import { TimeCircle } from './components/TimeCircle';
@@ -21,12 +21,16 @@ import { ActivityEditor } from './components/ActivityEditor';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { Logbook } from './components/Logbook';
 import { BottomSheet } from './components/BottomSheet';
+import { auth, db } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 const App: React.FC = () => {
   const { 
     view, energy, selectedDate, days, protocols, 
     addActivityToProtocol, updateActivityInProtocol, removeActivityFromProtocol, 
-    userConfig, setView, setReturnView, setSelectedDate 
+    userConfig, setView, setReturnView, setSelectedDate,
+    currentUser, setCurrentUser, replaceState
   } = useStore();
   
   // Editor State
@@ -48,6 +52,9 @@ const App: React.FC = () => {
   const [showProtocolMenu, setShowProtocolMenu] = useState(false);
   const [menuCoords, setMenuCoords] = useState<{x: number, y: number} | null>(null);
   
+  // Sync State
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // Mobile / Scroll State
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
   
@@ -84,6 +91,90 @@ const App: React.FC = () => {
       Notification.requestPermission();
     }
   }, []);
+
+  // --- FIREBASE SYNC LOGIC ---
+  useEffect(() => {
+    // 1. Listen for Auth State Changes
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUser({
+          uid: user.uid,
+          email: user.email,
+          photoURL: user.photoURL
+        });
+      } else {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, [setCurrentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // 2. Setup Realtime Listener (Cloud -> Local)
+    const userDocRef = doc(db, 'users', currentUser.uid);
+    let isRemoteUpdate = false;
+
+    const unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data) {
+          isRemoteUpdate = true;
+          // Merge logic: We trust cloud as truth when it updates
+          replaceState({
+             days: data.days,
+             protocols: data.protocols,
+             userConfig: { ...userConfig, ...data.userConfig },
+             energy: data.energy
+          });
+          // Reset flag after a short delay to allow re-enabling upload
+          setTimeout(() => { isRemoteUpdate = false; }, 500);
+        }
+      } else {
+        // Doc doesn't exist, create it with local data
+        setDoc(userDocRef, {
+            days,
+            protocols,
+            userConfig,
+            energy
+        }, { merge: true });
+      }
+    });
+
+    // 3. Setup Store Subscription (Local -> Cloud)
+    // We use a debounced save function to avoid spamming Firestore
+    let saveTimeout: any;
+    
+    const unsubscribeStore = useStore.subscribe((state) => {
+        if (!currentUser || isRemoteUpdate) return;
+        
+        setIsSyncing(true);
+        if (saveTimeout) clearTimeout(saveTimeout);
+        
+        saveTimeout = setTimeout(() => {
+            setDoc(userDocRef, {
+                days: state.days,
+                protocols: state.protocols,
+                userConfig: state.userConfig,
+                energy: state.energy,
+                updatedAt: new Date().toISOString()
+            }, { merge: true }).then(() => {
+                setIsSyncing(false);
+            }).catch(e => {
+                console.error("Sync failed", e);
+                setIsSyncing(false);
+            });
+        }, 2000); // 2 second debounce
+    });
+
+    return () => {
+        unsubscribeSnapshot();
+        unsubscribeStore();
+        if (saveTimeout) clearTimeout(saveTimeout);
+    };
+  }, [currentUser?.uid]); // Only re-run if UID changes
 
   // Keyboard Navigation for Dates
   useEffect(() => {
@@ -211,9 +302,12 @@ const App: React.FC = () => {
              <span className="type-label text-zinc-500">Active Protocol</span>
              <span className="type-h3 text-white truncate max-w-[200px]">{currentProtocolName || 'No Protocol'}</span>
           </div>
-          <span className="type-mono-body text-cyan-400">
-             {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-          </span>
+          <div className="flex items-center gap-4">
+             {isSyncing && <RefreshCw className="w-4 h-4 text-cyan-500 animate-spin" />}
+             <span className="type-mono-body text-cyan-400">
+                {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+             </span>
+          </div>
        </motion.div>
 
        {/* SCROLLABLE CONTENT START */}
@@ -328,7 +422,10 @@ const App: React.FC = () => {
               <div className="px-8 pt-12 pb-8 shrink-0 bg-[#020202] z-20 border-b border-white/5">
                 <div className="flex flex-wrap items-center justify-between gap-4 min-h-[48px]">
                     <div className="flex flex-col justify-center min-w-0">
-                      <h3 className="type-h1 text-white truncate leading-none mb-2">Protocol</h3>
+                      <div className="flex items-center gap-3">
+                         <h3 className="type-h1 text-white truncate leading-none mb-2">Protocol</h3>
+                         {isSyncing && <RefreshCw className="w-5 h-5 text-zinc-500 animate-spin" />}
+                      </div>
                       {currentProtocolName ? (
                         <span className="type-mono-sm text-zinc-500 truncate block">{currentProtocolName}</span>
                       ) : (

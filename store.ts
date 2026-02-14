@@ -1,7 +1,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { AppState, ViewType, ActivityDefinition, Protocol, UserConfig, ActivityLog, DayState, ChecklistItem } from './types';
+import { AppState, ViewType, ActivityDefinition, Protocol, UserConfig, ActivityLog, DayState, ChecklistItem, UserInfo } from './types';
 import { DEFAULT_PROTOCOL } from './constants';
 import { getDayId } from './utils';
 
@@ -14,6 +14,7 @@ export const useStore = create<AppState>()(
       returnView: 'DAY',
       selectedDate: getDayId(new Date()),
       energy: 50,
+      currentUser: null,
       
       // Initial Data: Only TODAY has a protocol.
       days: {
@@ -42,6 +43,16 @@ export const useStore = create<AppState>()(
 
       setView: (view: ViewType) => set({ view }),
       setReturnView: (view: ViewType) => set({ returnView: view }),
+
+      setCurrentUser: (user: UserInfo | null) => set({ currentUser: user }),
+      
+      replaceState: (newState: Partial<AppState>) => {
+          set((state) => ({
+              ...state,
+              ...newState
+          }));
+          get().updateEnergy();
+      },
 
       setSelectedDate: (date: string) => {
         set((state) => {

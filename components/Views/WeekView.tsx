@@ -36,16 +36,16 @@ export const WeekView: React.FC = () => {
   };
 
   return (
-    // RESTORED PADDING: py-20 (5rem), UPDATED desktop px to lg:px-20 (5rem)
-    <div className="w-full max-w-[1920px] mx-auto py-20 px-8 lg:px-20 h-full flex flex-col" onClick={() => setMenuState(null)}>
+    // CHANGED: Added flex flex-col and pb-40 (80px) to outer container to handle layout and spacing
+    <div className="w-full max-w-[1920px] mx-auto pt-20 px-8 lg:px-20 min-h-full flex flex-col pb-40" onClick={() => setMenuState(null)}>
       {/* Unified Header Style: Left Aligned */}
       <div className="mb-8 lg:mb-12 text-left shrink-0">
         <h2 className="type-h1 lg:type-display mb-4 text-white">Eight Day Horizon</h2>
         <p className="type-label text-zinc-500">Predictive Neural Pipeline</p>
       </div>
 
-      {/* Grid: 100% Height */}
-      <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 pb-32 lg:pb-0 min-h-0">
+      {/* Grid: Added flex-1 to fill remaining space, removed pb-40 from here */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 flex-1">
         {horizonDays.map((date, i) => {
           const id = getDayId(date);
           const computedActivities = getComputedActivities(days, protocols, id);
@@ -64,7 +64,7 @@ export const WeekView: React.FC = () => {
                 setView('DAY');
               }}
               onContextMenu={(e) => handleContextMenu(e, id)}
-              // Styles: min-h-[240px] enforced for mobile
+              // Styles: min-h-[240px] kept as safe minimum, h-full allows stretching
               className={`group relative flex flex-col items-center h-full min-h-[240px] p-6 lg:p-8 rounded-[3rem] border transition-all overflow-hidden cursor-pointer ${
                 isToday 
                   ? 'bg-zinc-900 border-cyan-500/40 shadow-[0_0_60px_rgba(6,182,212,0.1)] scale-105 z-10' 

@@ -52,6 +52,12 @@ export interface UserConfig {
   onboardingComplete: boolean;
 }
 
+export interface UserInfo {
+  uid: string;
+  email: string | null;
+  photoURL: string | null;
+}
+
 export type ViewType = 'MONTH' | 'WEEK' | 'DAY' | 'SETTINGS' | 'PROTOCOLS';
 
 export interface AppState {
@@ -59,6 +65,9 @@ export interface AppState {
   returnView: ViewType;
   selectedDate: string;
   energy: number;
+  
+  // Auth
+  currentUser: UserInfo | null;
   
   // Data
   days: Record<string, DayState>;
@@ -70,6 +79,11 @@ export interface AppState {
   setReturnView: (view: ViewType) => void;
   setSelectedDate: (date: string) => void;
   
+  // Auth Actions
+  setCurrentUser: (user: UserInfo | null) => void;
+  // Used for cloud sync to overwrite local state
+  replaceState: (state: Partial<AppState>) => void;
+
   // Logic
   toggleActivity: (date: string, activityId: string) => void;
   updateEnergy: () => void;
