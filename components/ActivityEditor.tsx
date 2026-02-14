@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Flame, Zap, Moon, Clock, X, AlertTriangle } from 'lucide-react';
+import { Trash2, Flame, Zap, Moon, Clock, X, Check } from 'lucide-react';
 import { ActivityDefinition, SlotType } from '../types';
 import { getEndTime, timeToMinutes } from '../utils';
 import { Button, Input } from './UI';
@@ -70,11 +70,25 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
   const handleSave = () => {
     if (data.title && data.startTime) {
       onSave(data as ActivityDefinition);
-      // We don't close automatically in panel mode if we want to keep editing, 
-      // but usually saving implies done.
-      onClose();
+      // In panel mode, clicking "Done" or Cmd+Enter should typically close/deselect the item too
+      // The user requested that clicking empty space deselects, but "Done" usually implies completion.
+      // We will close it here to satisfy "Done" button behavior.
+      onClose(); 
     }
   };
+
+  // Live Update for Panel Mode
+  useEffect(() => {
+     if (mode === 'panel' && isOpen && data.title && data.startTime) {
+         // Debounce live updates so we don't spam state
+         const timer = setTimeout(() => {
+             // We pass a flag or just call onSave without closing
+             // Note: ProtocolEditor needs to handle this update without closing the selection
+             onSave(data as ActivityDefinition);
+         }, 100);
+         return () => clearTimeout(timer);
+     }
+  }, [data, mode, isOpen]);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -99,19 +113,27 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-       if (e.key === 'Escape') onClose();
-       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave();
+       if (e.key === 'Escape') {
+           e.preventDefault();
+           e.stopPropagation();
+           onClose();
+       }
+       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+           e.preventDefault();
+           e.stopPropagation();
+           handleSave();
+       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, data]);
+  }, [isOpen, data, onClose]); // Added dependencies to ensure closure captures latest state
 
   if (!isOpen) return null;
 
   const isModal = mode === 'modal';
 
   return (
-    <div className={`fixed inset-0 z-[150] flex ${isModal ? (isMobile ? 'items-end' : 'items-center justify-center p-4') : 'items-end justify-center pb-8 pointer-events-none'}`}>
+    <div className={`fixed inset-0 z-[150] flex ${isModal ? (isMobile ? 'items-end' : 'items-center justify-center p-4') : 'items-end justify-center pointer-events-none'}`}>
        {/* Backdrop - Only for Modal Mode */}
        <AnimatePresence>
          {isModal && (
@@ -127,22 +149,22 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
 
        {/* Editor Content */}
        <motion.div
-         initial={isModal ? (isMobile ? { y: '100%' } : { scale: 0.95, opacity: 0, y: 20 }) : { y: 100, opacity: 0 }}
+         initial={isModal ? (isMobile ? { y: '100%' } : { scale: 0.95, opacity: 0, y: 20 }) : { y: 300, opacity: 0 }}
          animate={isModal ? (isMobile ? { y: 0 } : { scale: 1, opacity: 1, y: 0 }) : { y: 0, opacity: 1 }}
-         exit={isModal ? (isMobile ? { y: '100%' } : { scale: 0.95, opacity: 0, y: 20 }) : { y: 100, opacity: 0 }}
+         exit={isModal ? (isMobile ? { y: '100%' } : { scale: 0.95, opacity: 0, y: 20 }) : { y: 300, opacity: 0 }}
          transition={{ type: "spring", bounce: 0, duration: 0.3 }}
          // Padding Logic: 
          // Modal (Desktop) -> p-10 (More breathing room)
-         // Panel (Timeline) -> p-6 (Compact but not tight)
-         // Modal (Mobile) -> Full screen, padding handled inside
+         // Panel (Timeline) -> p-6, but max width restricted
+         // Modal (Mobile) -> h-auto, max-h-[90vh], rounded-t-[3rem]
          className={`relative w-full max-w-[75rem] bg-zinc-950 border border-white/10 overflow-hidden pointer-events-auto flex flex-col ${
              isModal 
-                ? (isMobile ? 'h-full rounded-none border-0' : 'rounded-[3rem] p-10 shadow-2xl') 
-                : 'shadow-[0_-20px_40px_rgba(0,0,0,0.5)] border-t border-white/20 rounded-[3rem] p-6 mb-24'
+                ? (isMobile ? 'h-auto max-h-[92vh] rounded-t-[3rem] border-0' : 'rounded-[3rem] p-10 shadow-2xl') 
+                : 'shadow-[0_-40px_80px_rgba(0,0,0,0.8)] border-t border-white/20 rounded-t-[3rem] p-6 pb-12 z-[200]'
          }`}
        >
           {/* Mobile Safe Area Spacer */}
-          {isModal && isMobile && <div className="h-8 shrink-0" />}
+          {isModal && isMobile && <div className="h-6 shrink-0 w-full flex justify-center"><div className="w-16 h-1 bg-zinc-800 rounded-full" /></div>}
 
           {/* Scrollable Container for Mobile */}
           <div className={`flex-1 overflow-y-auto ${isMobile && isModal ? 'p-6 pb-32' : ''}`}>
@@ -150,7 +172,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
                  {/* Header / Title Input */}
                  <div className="flex items-center gap-4">
                      <Input 
-                       autoFocus={!isMobile}
+                       autoFocus={isMobile || !isMobile} // Always autofocus title
                        placeholder="Activity Title"
                        value={data.title}
                        onChange={(e) => setData({ ...data, title: e.target.value })}
@@ -242,8 +264,8 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
 
                  {/* Footer Actions */}
                  <div className="flex flex-col md:flex-row items-center justify-between pt-2 gap-6">
-                     {/* Type Toggles */}
-                     <div className="flex gap-4 w-full justify-between md:w-auto md:justify-start">
+                     {/* Type Toggles - PADDING ADDED TO PREVENT CLIPPING */}
+                     <div className="flex gap-4 w-full justify-between md:w-auto md:justify-start overflow-visible p-2">
                         {(['BURN', 'FUEL', 'REST', 'VOID'] as SlotType[]).map(t => (
                           <button
                             key={t}

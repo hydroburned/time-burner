@@ -1,14 +1,15 @@
 
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../../store';
-import { User, Target, Shield, LogOut, Info } from 'lucide-react';
+import { User, Shield, LogOut, Info, Keyboard, ChevronDown } from 'lucide-react';
 import { Card } from '../UI';
 import { ConfirmationModal } from '../ConfirmationModal';
 
 export const SettingsView: React.FC = () => {
   const { userConfig, updateUserConfig } = useStore();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const handleReset = () => {
       localStorage.clear();
@@ -16,8 +17,8 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    // STRICT: px-8 = 2rem = 16px (since root font is 8px)
-    <div className="w-full max-w-[1920px] mx-auto pt-24 pb-12 px-8 h-full overflow-y-auto custom-scrollbar">
+    // RESTORED PADDING: pt-20 pb-20 (5rem), UPDATED desktop px to lg:px-20
+    <div className="w-full max-w-[1920px] mx-auto pt-20 pb-20 px-8 lg:px-20">
       <div className="max-w-[70rem] mx-auto pb-32">
         
         {/* Unified Header Style */}
@@ -75,9 +76,7 @@ export const SettingsView: React.FC = () => {
                 <Info className="w-8 h-8 text-cyan-500" />
              </div>
              <div className="flex-1">
-               {/* Reduced Title to type-body bold */}
                <h4 className="type-body font-bold text-zinc-300 uppercase">Operational Log</h4>
-               {/* Reduced Text to type-mono-sm */}
                <p className="type-mono-sm text-zinc-500 mt-2 leading-relaxed">
                  Completing FUEL (+15) and BURN (-20) entries synchronizes your energy vector.
                  Maintain balance to avoid system burnout.
@@ -85,17 +84,61 @@ export const SettingsView: React.FC = () => {
              </div>
           </Card>
 
+          {/* Collapsible Keyboard Shortcuts */}
+          <Card className="rounded-[3rem] bg-zinc-900/20 border-dashed overflow-hidden">
+             <button 
+                onClick={() => setShowShortcuts(!showShortcuts)}
+                className="w-full p-10 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+             >
+                <div className="flex items-center gap-8">
+                    <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                        <Keyboard className="w-8 h-8 text-zinc-400" />
+                    </div>
+                    <h4 className="type-body font-bold text-zinc-300 uppercase">Keyboard Controls</h4>
+                </div>
+                <ChevronDown className={`w-8 h-8 text-zinc-500 transition-transform ${showShortcuts ? 'rotate-180' : ''}`} />
+             </button>
+             
+             <AnimatePresence>
+                {showShortcuts && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="px-10 pb-10"
+                    >
+                        <div className="grid grid-cols-1 gap-6 pt-6 border-t border-white/5">
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                                <span className="type-mono-sm text-zinc-500">Navigate Dates</span>
+                                <span className="type-mono-sm text-white">Left / Right Arrow</span>
+                            </div>
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                                <span className="type-mono-sm text-zinc-500">Delete Node (Editor)</span>
+                                <span className="type-mono-sm text-white">Delete / Backspace</span>
+                            </div>
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                                <span className="type-mono-sm text-zinc-500">Save (Editor)</span>
+                                <span className="type-mono-sm text-white">Cmd + Enter</span>
+                            </div>
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                                <span className="type-mono-sm text-zinc-500">Close / Cancel</span>
+                                <span className="type-mono-sm text-white">Escape</span>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+             </AnimatePresence>
+          </Card>
+
           <section className="flex flex-col gap-6">
             <button className="flex items-center justify-between p-10 bg-zinc-900/40 border border-white/5 rounded-[3rem] hover:bg-zinc-900 hover:border-white/10 transition-colors group">
               <div className="flex items-center gap-6">
                 <Shield className="w-10 h-10 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
-                {/* Reduced to type-body */}
                 <span className="type-body font-bold text-white">Security Protocol</span>
               </div>
               <span className="type-label text-zinc-600 group-hover:text-cyan-500">ACTIVE</span>
             </button>
             
-            {/* Purge Button - Smaller Size */}
             <button 
               onClick={() => setShowResetConfirm(true)}
               className="flex items-center justify-center gap-4 p-8 bg-red-500/5 border border-red-500/10 rounded-[3rem] hover:bg-red-500/10 text-red-500 transition-colors group w-full"

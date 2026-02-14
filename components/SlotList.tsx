@@ -1,7 +1,7 @@
 
-import React, { useRef, useState } from 'react';
-import { motion, AnimatePresence, PanInfo, useMotionValue } from 'framer-motion';
-import { CheckCircle2, Zap, Flame, Edit2, Clock, Layers, Moon } from 'lucide-react';
+import React, { useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CheckCircle2, Zap, Flame, Edit2, Clock, Layers, Moon, StickyNote } from 'lucide-react';
 import { Activity } from '../types';
 import { useStore } from '../store';
 import { getEndTime, isActivityInFuture, timeToMinutes } from '../utils';
@@ -29,6 +29,7 @@ interface SlotItemProps {
     onHover?: (id: string | null) => void;
     onSelect?: (id: string) => void;
     handleToggle: (activity: Activity) => void;
+    handleOpenSheet: (activity: Activity) => void;
 }
 
 const SlotItem: React.FC<SlotItemProps> = ({
@@ -41,24 +42,63 @@ const SlotItem: React.FC<SlotItemProps> = ({
     onEdit,
     onHover,
     onSelect,
-    handleToggle
+    handleToggle,
+    handleOpenSheet
 }) => {
-    // Swipe State
-    const x = useMotionValue(0);
-
-    const handleDragEnd = (_: any, info: PanInfo) => {
+    // Refs for mobile interaction handling
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isLongPress = useRef(false);
+    const startPos = useRef<{x: number, y: number} | null>(null);
+    
+    // Interaction Handlers
+    const handlePointerDown = (e: React.PointerEvent) => {
         if (!isMobile) return;
         
-        // Swipe Left threshold
-        if (info.offset.x < -60) {
-            onEdit(activity);
+        isLongPress.current = false;
+        startPos.current = { x: e.clientX, y: e.clientY };
+
+        longPressTimer.current = setTimeout(() => {
+            isLongPress.current = true;
+            // Haptic for long press
+            if (navigator.vibrate) navigator.vibrate(50);
+            handleOpenSheet(activity);
+        }, 500); // 500ms threshold for long press
+    };
+
+    const handlePointerMove = (e: React.PointerEvent) => {
+        if (!isMobile || !startPos.current) return;
+        
+        const dist = Math.hypot(e.clientX - startPos.current.x, e.clientY - startPos.current.y);
+        if (dist > 10) { // If moved more than 10px, cancel long press (scrolling)
+            if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+            }
         }
     };
+
+    const handlePointerUp = (e: React.PointerEvent) => {
+        if (!isMobile) return;
+        
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+
+        // If not a long press (and not scrolled away), treat as tap
+        if (!isLongPress.current && startPos.current) {
+            // Check scroll logic again briefly if needed, but 'move' handles most
+            handleToggle(activity);
+        }
+        startPos.current = null;
+    };
+    
+    // ---
 
     const handleIconClick = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!activity.id.startsWith('virtual-')) handleToggle(activity);
+        if (!isMobile && !activity.id.startsWith('virtual-')) handleToggle(activity);
     };
     
     // DESKTOP Edit Handler (Button Click)
@@ -91,6 +131,7 @@ const SlotItem: React.FC<SlotItemProps> = ({
     let bgClass = 'bg-zinc-900/40 border-white/5 hover:bg-zinc-900/80';
     let textClass = 'text-zinc-300';
     let buttonStyle = 'bg-zinc-950 border-white/10 group-hover:border-white/20 active:scale-90';
+    let cursorClass = !isVirtual ? 'cursor-pointer' : '';
 
     if (isVirtual) {
       opacityClass = 'opacity-50';
@@ -104,6 +145,8 @@ const SlotItem: React.FC<SlotItemProps> = ({
            bgClass = 'bg-zinc-900/20 border-white/5'; 
            textClass = 'text-zinc-500';
            opacityClass = 'opacity-50 hover:opacity-100';
+           buttonStyle = 'bg-zinc-950/50 border-white/5 cursor-not-allowed';
+           cursorClass = 'cursor-default';
        }
 
        if (activity.completed) {
@@ -125,39 +168,33 @@ const SlotItem: React.FC<SlotItemProps> = ({
 
     return (
         <div className="relative group overflow-visible">
-            {/* SWIPE ACTION LAYER (Mobile Only) */}
-            {isMobile && !isVirtual && (
-                <div className="absolute inset-0 flex items-center justify-end px-8 z-0">
-                    <div className="flex items-center gap-2 text-zinc-500">
-                        <span className="type-label">Edit</span>
-                        <Edit2 className="w-6 h-6" />
-                    </div>
-                </div>
-            )}
-
             {/* MAIN CARD */}
             <motion.div
                 layout
-                // Mobile Swipe Config
-                drag={isMobile && !isVirtual ? "x" : false}
-                dragConstraints={{ left: -100, right: 0 }}
-                dragElastic={0.1}
-                onDragEnd={handleDragEnd}
-                style={{ x }}
-                
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 
+                // Interaction Bindings
                 onClick={handleBodyClick}
                 onMouseEnter={() => !isMobile && onHover && onHover(activity.id)}
                 onMouseLeave={() => !isMobile && onHover && onHover(null)}
                 
-                className={`relative z-10 flex items-center gap-6 md:gap-10 p-6 rounded-[3rem] border transition-all duration-300 select-none overflow-hidden ${opacityClass} ${bgClass} ${!isVirtual ? 'cursor-pointer' : ''}`}
+                // Mobile Touch Bindings
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                onContextMenu={(e) => {
+                    // Prevent native menu on mobile long press
+                    if(isMobile) e.preventDefault();
+                }}
+                
+                className={`relative z-10 flex items-center gap-6 md:gap-10 p-6 rounded-[3rem] border transition-all duration-300 select-none overflow-hidden ${opacityClass} ${bgClass} ${cursorClass}`}
             >
                  {/* Status Icon */}
                 <div 
-                    onClick={handleIconClick}
+                    onClick={!isFuture && !isMobile ? handleIconClick : undefined}
                     className={`flex-shrink-0 w-20 h-20 rounded-[1.5rem] flex items-center justify-center transition-all border relative z-10 ${buttonStyle}`}
                 >
                 {activity.completed ? (
@@ -205,6 +242,10 @@ const SlotItem: React.FC<SlotItemProps> = ({
                         <h3 className={`type-body font-bold truncate ${textClass}`}>
                         {activity.title}
                         </h3>
+                        {/* Note Indicator - UPDATED SIZE to 20px (w-5 h-5) */}
+                        {activity.hasNotes && (
+                            <StickyNote className="w-5 h-5 text-zinc-500 fill-zinc-500/20" />
+                        )}
                     </div>
                 </div>
 
@@ -245,7 +286,8 @@ export const SlotList: React.FC<SlotListProps> = ({
     // Virtual slots are read-only
     if (activity.id.startsWith('virtual-')) return;
     
-    // Allow toggle anytime (removed isFuture check based on previous request)
+    // Check Future
+    if (isActivityInFuture(selectedDate, activity.startTime)) return;
     
     // Haptic Feedback
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -253,6 +295,10 @@ export const SlotList: React.FC<SlotListProps> = ({
     }
     
     toggleActivity(selectedDate, activity.id);
+  };
+  
+  const handleOpenSheet = (activity: Activity) => {
+      if(onOpenContext) onOpenContext(activity);
   };
 
   return (
@@ -272,6 +318,7 @@ export const SlotList: React.FC<SlotListProps> = ({
                 onHover={onHover}
                 onSelect={onSelect}
                 handleToggle={handleToggle}
+                handleOpenSheet={handleOpenSheet}
             />
         ))}
       </AnimatePresence>

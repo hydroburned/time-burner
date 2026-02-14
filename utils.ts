@@ -69,10 +69,14 @@ export const getComputedActivities = (
        // Defensive mapping: Ensure activity is valid before processing
        const currentDayActivities = protocol.activities
          .filter(def => def && def.id && typeof def.startTime === 'string')
-         .map(def => ({
-           ...def,
-           completed: completedIds.has(def.id)
-         }));
+         .map(def => {
+           const log = dayState.activityLogs[def.id];
+           return {
+             ...def,
+             completed: completedIds.has(def.id),
+             hasNotes: !!(log && (log.notes.trim().length > 0 || log.checklist.length > 0))
+           };
+         });
        
        activities.push(...currentDayActivities);
     }

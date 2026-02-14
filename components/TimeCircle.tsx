@@ -184,8 +184,8 @@ export const TimeCircle: React.FC<TimeCircleProps> = ({
       </div>
 
       {/* Info Below Dial */}
-      {/* Added p-8 (2rem) padding around the pill */}
-      <div className="h-16 w-full flex items-start justify-center mt-12 p-8">
+      {/* Updated Padding: p-8 pb-20 for mobile (40px bottom) */}
+      <div className="h-16 w-full flex items-start justify-center mt-12 p-8 lg:pb-8 pb-20">
         {activeActivity ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}

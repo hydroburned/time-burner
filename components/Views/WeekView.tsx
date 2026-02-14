@@ -36,22 +36,21 @@ export const WeekView: React.FC = () => {
   };
 
   return (
-    // STRICT: px-8 = 2rem = 16px (since root font is 8px)
-    <div className="w-full max-w-[1920px] mx-auto py-12 px-8 min-h-full" onClick={() => setMenuState(null)}>
+    // RESTORED PADDING: py-20 (5rem), UPDATED desktop px to lg:px-20 (5rem)
+    <div className="w-full max-w-[1920px] mx-auto py-20 px-8 lg:px-20 h-full flex flex-col" onClick={() => setMenuState(null)}>
       {/* Unified Header Style: Left Aligned */}
-      <div className="mb-16 text-left">
-        {/* Responsive font size: type-h1 on mobile, type-display on desktop */}
+      <div className="mb-8 lg:mb-12 text-left shrink-0">
         <h2 className="type-h1 lg:type-display mb-4 text-white">Eight Day Horizon</h2>
         <p className="type-label text-zinc-500">Predictive Neural Pipeline</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 pb-32">
+      {/* Grid: 100% Height */}
+      <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 pb-32 lg:pb-0 min-h-0">
         {horizonDays.map((date, i) => {
           const id = getDayId(date);
           const computedActivities = getComputedActivities(days, protocols, id);
           const todayId = getDayId(new Date());
           const isToday = id === todayId;
-          const isPast = date < new Date(todayId);
           const isEmpty = computedActivities.length === 0;
 
           return (
@@ -65,18 +64,15 @@ export const WeekView: React.FC = () => {
                 setView('DAY');
               }}
               onContextMenu={(e) => handleContextMenu(e, id)}
-              // STRICT: min-h reduced to 280px on mobile
-              className={`group relative flex flex-col items-center min-h-[280px] md:min-h-[380px] p-8 rounded-[3rem] border transition-all overflow-hidden cursor-pointer ${
+              // Styles: min-h-[240px] enforced for mobile
+              className={`group relative flex flex-col items-center h-full min-h-[240px] p-6 lg:p-8 rounded-[3rem] border transition-all overflow-hidden cursor-pointer ${
                 isToday 
                   ? 'bg-zinc-900 border-cyan-500/40 shadow-[0_0_60px_rgba(6,182,212,0.1)] scale-105 z-10' 
-                  : isPast 
-                    ? 'bg-zinc-900/10 border-white/5 opacity-40 grayscale' 
-                    : 'bg-zinc-900/40 border-white/5 hover:border-white/10 hover:bg-zinc-900/60'
+                  : 'bg-zinc-900/40 border-white/5 hover:border-white/10 hover:bg-zinc-900/60'
               }`}
             >
               {/* MOBILE TOP-RIGHT ACTION BUTTON (Hidden on Desktop) */}
-              {!isPast && (
-                <button
+              <button
                     onClick={(e) => handleSetup(e, id)}
                     className={`md:hidden absolute top-6 right-6 p-3 rounded-full border transition-all z-20 ${
                         isEmpty 
@@ -85,10 +81,9 @@ export const WeekView: React.FC = () => {
                     }`}
                 >
                     {isEmpty ? <Plus className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
-                </button>
-              )}
+              </button>
 
-              <div className="text-center relative z-10 pointer-events-none mt-6">
+              <div className="text-center relative z-10 pointer-events-none mt-2 lg:mt-6">
                 <span className={`type-h3 block mb-4 uppercase ${isToday ? 'text-cyan-400' : 'text-zinc-600'}`}>
                   {date.toLocaleDateString('en-US', { weekday: 'short' })}
                 </span>
@@ -109,7 +104,6 @@ export const WeekView: React.FC = () => {
 
               {/* DESKTOP BOTTOM ACTION BUTTON (Hidden on Mobile) */}
               <div className="flex-1 w-full flex items-end justify-center relative z-10 mt-auto pb-8 hidden md:flex">
-                {!isPast && (
                    <motion.button 
                     onClick={(e) => handleSetup(e, id)}
                     className={`flex items-center gap-3 px-8 py-4 rounded-2xl border transition-all shadow-lg ${
@@ -121,11 +115,10 @@ export const WeekView: React.FC = () => {
                     {isEmpty ? <BookTemplate className="w-6 h-6" /> : <RefreshCw className="w-6 h-6" />}
                     <span className="type-body font-bold">{isEmpty ? 'Assign' : 'Change'}</span>
                   </motion.button>
-                )}
               </div>
 
               {/* INCREASED PADDING: pt-10 and pb-6 for timeline block */}
-              <div className="w-full relative z-10 pt-10 pb-6 border-t border-white/5">
+              <div className="w-full relative z-10 pt-10 pb-6 border-t border-white/5 mt-auto">
                 <MiniTimeline activities={computedActivities} />
               </div>
             </motion.div>

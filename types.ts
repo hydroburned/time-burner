@@ -16,6 +16,7 @@ export interface ActivityDefinition {
 // The computed instance for a specific day (includes completion status)
 export interface Activity extends ActivityDefinition {
   completed: boolean;
+  hasNotes?: boolean; // Visual indicator if log exists
 }
 
 export interface ChecklistItem {

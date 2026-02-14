@@ -51,8 +51,11 @@ const App: React.FC = () => {
   // Mobile / Scroll State
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
   
-  // Uses window scroll by default if no container ref is passed
-  const { scrollY } = useScroll(); 
+  // Ref for the scrollable container (Mobile Day View)
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Uses the scroll container ref for tracking scroll on mobile
+  const { scrollY } = useScroll({ container: scrollContainerRef }); 
 
   // Header Animation: Fade IN the sticky header when we scroll past the clock (approx 300px)
   const miniHeaderOpacity = useTransform(scrollY, [250, 350], [0, 1]);
@@ -195,8 +198,8 @@ const App: React.FC = () => {
   // --- Views Renders ---
 
   const renderMobileDayView = () => (
-    // Default window scrolling behavior
-    <div className="flex flex-col min-h-screen bg-[#020202]">
+    // Updated: h-full overflow-y-auto to handle scroll internally within the fixed app container
+    <div className="flex flex-col min-h-full bg-[#020202]">
        
        {/* STICKY MINI HEADER */}
        {/* It sits on top but is hidden/transparent until scroll */}
@@ -232,7 +235,8 @@ const App: React.FC = () => {
        </div>
 
        {/* 2. List Area (Scrolls naturally below clock) */}
-       <div className="bg-[#020202] relative z-30 px-4 pb-40">
+       {/* ADDED PT-8 padding top to prevent overlap with Current Phase block */}
+       <div className="bg-[#020202] relative z-30 px-4 pt-8 pb-40">
             {/* List Controls */}
             <div className="flex items-center justify-between px-2 mb-6">
                 <h3 className="type-h2 text-white">Protocol</h3>
@@ -289,7 +293,8 @@ const App: React.FC = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="flex flex-row h-screen overflow-hidden w-full gap-0"
+        // Changed h-screen to h-full to fit within parent
+        className="flex flex-row h-full overflow-hidden w-full gap-0"
       >
         {/* LEFT COLUMN */}
         <div className="flex flex-col relative z-10 w-[50rem] shrink-0 h-full py-12 bg-transparent justify-between border-r border-white/5">
@@ -353,7 +358,7 @@ const App: React.FC = () => {
 
                       <Button 
                         variant="primary" 
-                        size="md"
+                        size="md" 
                         onClick={(e) => openInject(null, e)} 
                         icon={<Plus />}
                         disabled={!currentProtocolId}
@@ -393,21 +398,32 @@ const App: React.FC = () => {
       </motion.div>
   );
 
+  // Wrappers now handle the scroll context
   const renderView = () => {
     switch (view) {
-      case 'WEEK': return <div className="p-0 md:p-8 lg:p-16 h-full overflow-y-auto"><WeekView /></div>;
-      case 'MONTH': return <div className="p-0 md:p-8 lg:p-16 h-full overflow-y-auto"><MonthView /></div>;
-      case 'SETTINGS': return <div className="h-full overflow-hidden"><SettingsView /></div>;
-      case 'PROTOCOLS': return <div className="p-0 md:p-8 lg:p-16 h-full overflow-hidden"><ProtocolManager /></div>;
+      case 'WEEK': return <div className="w-full h-full overflow-y-auto custom-scrollbar"><WeekView /></div>;
+      case 'MONTH': return <div className="w-full h-full overflow-y-auto custom-scrollbar"><MonthView /></div>;
+      case 'SETTINGS': return <div className="w-full h-full overflow-y-auto custom-scrollbar"><SettingsView /></div>;
+      case 'PROTOCOLS': return <div className="w-full h-full overflow-y-auto custom-scrollbar"><ProtocolManager /></div>;
       case 'DAY':
       default:
-        return isMobile ? renderMobileDayView() : renderDesktopDayView();
+        // Day Views handle their own scrolling (Mobile = internal, Desktop = flex columns)
+        // Wrapped in div to match height of parent
+        return <div className="w-full h-full overflow-hidden">
+           {isMobile ? (
+              // Use ref here to track scroll for sticky header
+              <div ref={scrollContainerRef} className="h-full overflow-y-auto custom-scrollbar">
+                {renderMobileDayView()}
+              </div>
+           ) : renderDesktopDayView()}
+        </div>;
     }
   };
 
   return (
-    <div className={`flex flex-col transition-colors duration-700 ${isBurnout ? 'glitch-red' : ''} bg-[#020202]`}>
-      <main className="flex-1 w-full relative min-h-screen">
+    // Changed: h-screen overflow-hidden to fix the layout context
+    <div className={`flex flex-col h-screen overflow-hidden transition-colors duration-700 ${isBurnout ? 'glitch-red' : ''} bg-[#020202]`}>
+      <main className="flex-1 w-full h-full relative overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
              key={view}
@@ -415,7 +431,7 @@ const App: React.FC = () => {
              animate={{ opacity: 1 }}
              exit={{ opacity: 0 }}
              transition={{ duration: 0.2 }}
-             className="min-h-screen"
+             className="w-full h-full"
           >
             {renderView()}
           </motion.div>

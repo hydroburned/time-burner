@@ -91,8 +91,8 @@ export const ProtocolManager: React.FC = () => {
 
   // --- RENDER LIBRARY LIST ---
   return (
-    // STRICT: px-8 = 2rem = 16px (since root font is 8px)
-    <div className="w-full max-w-[1920px] mx-auto py-12 px-8 h-full overflow-y-auto custom-scrollbar">
+    // RESTORED PADDING: py-20, UPDATED desktop px to lg:px-20
+    <div className="w-full max-w-[1920px] mx-auto py-20 px-8 lg:px-20">
       {/* Unified Header Style: 32px (4rem), font-semibold (600) */}
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
         <div>

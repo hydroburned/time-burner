@@ -14,8 +14,10 @@ import { Button } from '../UI';
 import { ActivityEditor } from '../ActivityEditor';
 import { ConfirmationModal } from '../ConfirmationModal';
 
-// Increased from 3 to 4 to give "more air" between blocks
-const PIXELS_PER_MINUTE = 4; 
+// Different scales for Mobile vs Desktop
+const PIXELS_PER_MINUTE_MOBILE = 1.5;
+const PIXELS_PER_MINUTE_DESKTOP = 3; // 1.5x of previous 2.0 or general desktop scale
+
 const SNAP_MINUTES = 15;
 const TOTAL_MINUTES = 1440;
 
@@ -36,7 +38,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
   // Confirmation State
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Points to the scrolling container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ nodeId: string; startX: number; startY: number; startMins: number; type: 'MOVE' | 'RESIZE_R' | 'RESIZE_L'; startDuration: number; } | null>(null);
   const longPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,6 +45,8 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
   // Motion Values for Drag Scroll Tracking
   const scrollX = useMotionValue(0);
   const scrollY = useMotionValue(0);
+
+  const pixelsPerMinute = isMobile ? PIXELS_PER_MINUTE_MOBILE : PIXELS_PER_MINUTE_DESKTOP;
 
   // Initialize State
   useEffect(() => {
@@ -109,7 +112,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!editingNodeId) return;
       
-      // Ignore if typing in an input
       const target = e.target as HTMLElement;
       if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
 
@@ -177,10 +179,8 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     
     const { nodeId, startX, startY, startMins, startDuration, type } = dragRef.current;
     
-    // Determine movement distance
     const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
     
-    // Cancel long press if moved significantly
     if (dist > 5 && longPressTimeout.current) {
         clearTimeout(longPressTimeout.current);
         longPressTimeout.current = null;
@@ -189,7 +189,7 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     e.stopPropagation();
     
     const deltaPx = isMobile ? (e.clientY - startY) : (e.clientX - startX);
-    const deltaMins = deltaPx / PIXELS_PER_MINUTE;
+    const deltaMins = deltaPx / pixelsPerMinute;
 
     if (type === 'MOVE') {
       const rawMins = startMins + deltaMins;
@@ -217,7 +217,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     if (dragRef.current) {
       const { nodeId, startX, startY, type } = dragRef.current;
       
-      // Desktop Click Detection
       if (!isMobile && type === 'MOVE') {
           const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
           if (dist < 5) {
@@ -234,7 +233,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     if (!scrollContainerRef.current) return;
     const containerRect = scrollContainerRef.current.getBoundingClientRect();
     
-    // Simple containment check
     const isInside = 
         info.point.x >= containerRect.left && 
         info.point.x <= containerRect.right &&
@@ -244,25 +242,19 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     if (isInside) {
         let timeMins = 0;
         
-        // CORRECTION: We must subtract the current scroll offset (transform) to get the correct position relative to content
         const currentScrollX = scrollX.get();
         const currentScrollY = scrollY.get();
 
         if (isMobile) {
-            // Mobile: Vertical Drag
-            // Drop Y relative to container top
             const relativeY = info.point.y - containerRect.top;
-            // Adjust for scroll (scroll is negative when moved up, so we subtract it to get positive coordinate)
             const absoluteY = relativeY - currentScrollY; 
-            timeMins = absoluteY / PIXELS_PER_MINUTE;
+            timeMins = absoluteY / pixelsPerMinute;
         } else {
-            // Desktop: Horizontal Drag
             const relativeX = info.point.x - containerRect.left;
             const absoluteX = relativeX - currentScrollX;
-            timeMins = absoluteX / PIXELS_PER_MINUTE;
+            timeMins = absoluteX / pixelsPerMinute;
         }
         
-        // Center the new block roughly under the finger/cursor (subtract half block duration ~30mins)
         timeMins -= 30; 
         addNode(type, Math.max(0, timeMins));
     }
@@ -278,9 +270,9 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
 
     let timeMins = 0;
     if (isMobile) {
-        timeMins = (e.clientY - rect.top - currentScrollY) / PIXELS_PER_MINUTE;
+        timeMins = (e.clientY - rect.top - currentScrollY) / pixelsPerMinute;
     } else {
-        timeMins = (e.clientX - rect.left - currentScrollX) / PIXELS_PER_MINUTE;
+        timeMins = (e.clientX - rect.left - currentScrollX) / pixelsPerMinute;
     }
     setContextMenu({ x: e.clientX, y: e.clientY, time: timeMins });
   };
@@ -288,13 +280,11 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
   const handleModalSave = (def: ActivityDefinition) => {
      if(editingNodeId) {
          updateNode(editingNodeId, def);
-         setEditingNodeId(null);
      }
   };
 
   const editingNode = draftActivities.find(a => a.id === editingNodeId);
-  // Adjusted Canvas Size calculation
-  const canvasSize = (TOTAL_MINUTES * PIXELS_PER_MINUTE) + (isMobile ? 200 : 0); 
+  const canvasSize = (TOTAL_MINUTES * pixelsPerMinute) + (isMobile ? 400 : 0); 
 
   return (
     <div className="fixed inset-0 bg-black z-[150] flex flex-col overflow-hidden select-none pb-safe">
@@ -346,7 +336,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
                 right: 0
             }}
             dragElastic={0.1}
-            // Bind x/y to track scroll position for drag-and-drop calculation
             style={{ 
                 x: scrollX,
                 y: scrollY,
@@ -354,7 +343,10 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
                 width: isMobile ? '100%' : canvasSize 
             }}
             onContextMenu={handleContextMenu}
-            onClick={() => setContextMenu(null)}
+            onClick={() => {
+                setContextMenu(null);
+                setEditingNodeId(null);
+            }}
         >
             {/* Grid Lines & Labels */}
             {Array.from({ length: 25 }).map((_, h) => (
@@ -362,10 +354,9 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
                 key={h} 
                 className={`absolute border-white/5 pointer-events-none ${isMobile ? 'left-0 right-0 border-t' : 'top-0 bottom-0 border-l'}`}
                 style={{ 
-                  [isMobile ? 'top' : 'left']: h * 60 * PIXELS_PER_MINUTE,
+                  [isMobile ? 'top' : 'left']: h * 60 * pixelsPerMinute,
                 }}
               >
-                {/* 1.5rem = 12px label */}
                 <span className={`absolute type-mono-sm text-zinc-600 select-none z-10 px-1 ${isMobile ? 'left-2 -top-2' : 'left-2 top-2'}`}>
                   {h.toString().padStart(2, '0')}:00
                 </span>
@@ -374,8 +365,8 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
 
             {/* Nodes Rendering */}
             {draftActivities.map((node) => {
-              const pos = timeToMinutes(node.startTime) * PIXELS_PER_MINUTE;
-              const size = node.duration * PIXELS_PER_MINUTE;
+              const pos = timeToMinutes(node.startTime) * pixelsPerMinute;
+              const size = node.duration * pixelsPerMinute;
               const isEditing = editingNodeId === node.id;
               return (
                 <div
@@ -440,25 +431,34 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
       </div>
         
       {/* Dock (Left Menu on Desktop, Bottom on Mobile) */}
-      <div className={`absolute z-[160] flex gap-6 ${isMobile ? 'bottom-8 left-0 right-0 justify-center' : 'left-6 top-1/2 -translate-y-1/2 flex-col'}`}>
-            {(['BURN', 'FUEL', 'REST', 'VOID'] as SlotType[]).map(type => (
-                <motion.div 
-                  key={type} 
-                  drag 
-                  dragMomentum={false}
-                  dragElastic={0}
-                  dragTransition={{ power: 0, timeConstant: 0 }} 
-                  dragSnapToOrigin 
-                  onDragEnd={(e, info) => handleDockDragEnd(e, info, type)}
-                  whileDrag={{ scale: 1.1, zIndex: 999 }}
-                  // Removed transition-transform to fix delay
-                  className={`${isMobile ? 'w-28 h-28 rounded-2xl' : 'w-44 h-44 rounded-xl'} bg-zinc-900/90 backdrop-blur border border-white/10 flex flex-col items-center justify-center gap-3 cursor-grab shadow-lg hover:border-white/20 hover:scale-105`}
-                >
-                    <div className="w-4 h-4 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: COLORS[type], color: COLORS[type] }} />
-                    <span className="type-label text-zinc-500">{type}</span>
-                </motion.div>
-            ))}
-      </div>
+      {/* HIDDEN WHEN EDITING TO PREVENT Z-INDEX ISSUES */}
+      <AnimatePresence>
+        {!editingNodeId && (
+            <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className={`absolute z-[160] flex gap-6 pointer-events-auto ${isMobile ? 'bottom-8 left-0 right-0 justify-center' : 'left-6 top-1/2 -translate-y-1/2 flex-col'}`}
+            >
+                {(['BURN', 'FUEL', 'REST', 'VOID'] as SlotType[]).map(type => (
+                    <motion.div 
+                    key={type} 
+                    drag 
+                    dragMomentum={false}
+                    dragElastic={0}
+                    dragTransition={{ power: 0, timeConstant: 0 }} 
+                    dragSnapToOrigin 
+                    onDragEnd={(e, info) => handleDockDragEnd(e, info, type)}
+                    whileDrag={{ scale: 1.1, zIndex: 999 }}
+                    className={`${isMobile ? 'w-28 h-28 rounded-2xl' : 'w-44 h-44 rounded-xl'} bg-zinc-900/90 backdrop-blur border border-white/10 flex flex-col items-center justify-center gap-3 cursor-grab shadow-lg hover:border-white/20 hover:scale-105`}
+                    >
+                        <div className="w-4 h-4 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: COLORS[type], color: COLORS[type] }} />
+                        <span className="type-label text-zinc-500">{type}</span>
+                    </motion.div>
+                ))}
+            </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Context Menu */}
       <AnimatePresence>
