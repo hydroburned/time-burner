@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence, PanInfo, useMotionValue } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { useStore } from '../../store';
 import { 
   ChevronLeft,
@@ -229,7 +229,7 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     }
   };
 
-  const handleDockDragEnd = (e: any, info: PanInfo, type: SlotType) => {
+  const handleDockDragEnd = (e: any, info: any, type: SlotType) => {
     if (!scrollContainerRef.current) return;
     const containerRect = scrollContainerRef.current.getBoundingClientRect();
     

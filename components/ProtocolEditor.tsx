@@ -1,15 +1,15 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { useStore } from '../../store';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useStore } from '../store';
 import { 
   ChevronLeft,
   Check,
   Trash2,
 } from 'lucide-react';
-import { ActivityDefinition, SlotType, Protocol } from '../../types';
-import { COLORS } from '../../constants';
-import { timeToMinutes, minutesToTime } from '../../utils';
+import { ActivityDefinition, SlotType, Protocol } from '../types';
+import { COLORS } from '../constants';
+import { timeToMinutes, minutesToTime } from '../utils';
 import { Button } from '../UI';
 import { ActivityEditor } from '../ActivityEditor';
 import { ConfirmationModal } from '../ConfirmationModal';
@@ -166,7 +166,7 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     }
   };
 
-  const handleDockDragEnd = (e: any, info: PanInfo, type: SlotType) => {
+  const handleDockDragEnd = (e: any, info: any, type: SlotType) => {
     if (!scrollContainerRef.current) return;
     const containerRect = scrollContainerRef.current.getBoundingClientRect();
     
@@ -193,7 +193,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!scrollContainerRef.current) return;
-    
     const rect = scrollContainerRef.current.getBoundingClientRect();
     const scrollOffset = isMobile ? scrollContainerRef.current.scrollTop : scrollContainerRef.current.scrollLeft;
     
