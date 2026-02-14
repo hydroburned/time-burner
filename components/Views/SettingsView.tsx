@@ -26,7 +26,7 @@ export const SettingsView: React.FC = () => {
     setAuthError(null);
     setIsLoggingIn(true);
     
-    // Pause automatic syncing in App.tsx
+    // 1. Pause App.tsx sync listeners to prevent race conditions
     setPendingSyncDecision(true);
 
     const provider = new GoogleAuthProvider();
@@ -34,27 +34,30 @@ export const SettingsView: React.FC = () => {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Check if data exists in cloud
+      // 2. Check Cloud Data
       const userDocRef = doc(db, 'users', user.uid);
       const docSnap = await getDoc(userDocRef);
 
       if (docSnap.exists()) {
-          // CONFLICT DETECTED: Trigger Global Modal via Store
+          // 3a. CONFLICT: Data exists in cloud. Ask user.
           console.log("Cloud data found, triggering conflict modal...");
           setSyncConflictData(docSnap.data());
-          // Note: isPendingSyncDecision remains true until the modal resolves it
+          // NOTE: isPendingSyncDecision remains TRUE. 
+          // It will be set to FALSE by the Modal when the user makes a choice.
       } else {
-          // NO DATA IN CLOUD: Safe to upload local data immediately
+          // 3b. EMPTY CLOUD: Safe to upload local data immediately.
           console.log("No cloud data found. Uploading local data...");
           await uploadLocalToCloud(user.uid);
+          
+          // Resume normal sync
           setPendingSyncDecision(false);
       }
 
     } catch (error: any) {
       console.error("Login failed", error);
-      setPendingSyncDecision(false); // Reset on error
+      // IMPORTANT: Reset pending state on error so app doesn't freeze
+      setPendingSyncDecision(false);
       
-      // Handle specific Firebase errors
       if (error.code === 'auth/configuration-not-found') {
           setAuthError("Google Sign-In disabled. Enable 'Google' in Firebase Console > Auth > Sign-in method.");
       } else if (error.code === 'auth/unauthorized-domain') {
@@ -87,6 +90,8 @@ export const SettingsView: React.FC = () => {
     try {
       await signOut(auth);
       setAuthError(null);
+      // Ensure pending is false on logout
+      setPendingSyncDecision(false);
     } catch (error) {
       console.error("Logout failed", error);
     }
@@ -105,7 +110,7 @@ export const SettingsView: React.FC = () => {
           </div>
           <div className="flex flex-col items-start md:items-end gap-2 opacity-60">
              <span className="type-label text-white">Time Burner</span>
-             <span className="type-caption text-zinc-500">v1.0.4 // {currentUser ? 'CLOUD SYNC' : 'LOCAL'}</span>
+             <span className="type-caption text-zinc-500">v1.0.5 // {currentUser ? 'CLOUD SYNC' : 'LOCAL'}</span>
           </div>
         </div>
 
@@ -171,7 +176,7 @@ export const SettingsView: React.FC = () => {
                 />
               </div>
 
-              {/* Cloud Command Center (Replaces Bio) */}
+              {/* Cloud Command Center */}
               <div className="bg-black border border-white/5 rounded-[2rem] p-8 flex flex-col md:flex-row items-center justify-between gap-8">
                  <div className="flex items-center gap-6">
                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${currentUser ? 'bg-cyan-500/10 text-cyan-400' : 'bg-zinc-900 text-zinc-600'}`}>

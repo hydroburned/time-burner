@@ -18,6 +18,7 @@ export const SyncConflictModal: React.FC = () => {
   
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // If no conflict data, do not render.
   if (!syncConflictData) return null;
 
   const handleSyncChoice = async (choice: 'KEEP_LOCAL' | 'USE_CLOUD') => {
@@ -40,6 +41,7 @@ export const SyncConflictModal: React.FC = () => {
               console.log("Cloud overwritten with local data.");
           } else {
               // 2. Overwrite local with cloud data (syncConflictData)
+              // NOTE: We do not need to check for isRemoteUpdate here because setPendingSyncDecision is still true
               replaceState({
                 days: syncConflictData.days || {},
                 protocols: syncConflictData.protocols || [],
@@ -54,12 +56,17 @@ export const SyncConflictModal: React.FC = () => {
       } finally {
           setIsProcessing(false);
           setSyncConflictData(null); // Close Modal
-          setPendingSyncDecision(false); // Resume Auto-Sync
+          
+          // CRITICAL: Delay unblocking sync slightly to ensure state settles
+          setTimeout(() => {
+              setPendingSyncDecision(false); 
+          }, 100);
       }
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+    // High Z-Index to ensure it sits on top of everything
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
