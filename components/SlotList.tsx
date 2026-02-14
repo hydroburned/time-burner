@@ -85,10 +85,15 @@ const SlotItem: React.FC<SlotItemProps> = ({
             longPressTimer.current = null;
         }
 
-        // If not a long press (and not scrolled away), treat as tap
+        // If not a long press (and not scrolled away), check area and treat as tap
         if (!isLongPress.current && startPos.current) {
-            // Check scroll logic again briefly if needed, but 'move' handles most
-            handleToggle(activity);
+             const rect = e.currentTarget.getBoundingClientRect();
+             const clickX = e.clientX - rect.left;
+             // Logic: If click is in the first 50% of the card, toggle.
+             // Otherwise, do nothing (allows scrolling on the right side).
+             if (clickX <= rect.width * 0.5) {
+                 handleToggle(activity);
+             }
         }
         startPos.current = null;
     };

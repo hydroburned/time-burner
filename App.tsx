@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, PanInfo } from 'framer-motion';
 import { Plus, BookTemplate, AlertTriangle, RefreshCw, CheckCircle2, WifiOff, Lock } from 'lucide-react';
 import { useStore } from './store';
 import { Navigation } from './components/Navigation';
@@ -306,77 +306,103 @@ const App: React.FC = () => {
 
   // --- Views Renders ---
 
-  const renderMobileDayView = () => (
-    <div className="flex flex-col min-h-full bg-[#020202]">
-       {/* STICKY MINI HEADER */}
-       <motion.div 
-         style={{ opacity: miniHeaderOpacity, y: miniHeaderY, pointerEvents: miniHeaderPointerEvents }}
-         className="fixed top-0 left-0 right-0 z-40 bg-black/90 backdrop-blur-md border-b border-white/10 px-6 py-4 pt-safe-top flex items-center justify-between"
-       >
-          <div className="flex flex-col">
-             <span className="type-label text-zinc-500">Active Protocol</span>
-             <span className="type-h3 text-white truncate max-w-[200px]">{currentProtocolName || 'No Protocol'}</span>
-          </div>
-          <div className="flex items-center gap-4">
-             {syncStatus === 'SYNCING' && <RefreshCw className="w-4 h-4 text-cyan-500 animate-spin" />}
-             <span className="type-mono-body text-cyan-400">
-                {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-             </span>
-          </div>
-       </motion.div>
+  const renderMobileDayView = () => {
+    const handleSwipe = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+        const THRESHOLD = 50;
+        if (info.offset.x > THRESHOLD) {
+            // Swipe Right -> Prev Day
+            const d = new Date(selectedDate);
+            d.setDate(d.getDate() - 1);
+            setSelectedDate(d.toISOString().split('T')[0]);
+        } else if (info.offset.x < -THRESHOLD) {
+            // Swipe Left -> Next Day
+            const d = new Date(selectedDate);
+            d.setDate(d.getDate() + 1);
+            setSelectedDate(d.toISOString().split('T')[0]);
+        }
+    };
 
-       {/* SCROLLABLE CONTENT */}
-       <div className="w-full flex flex-col gap-8 px-4 pt-8 pb-12 bg-[#020202]">
-            <DateHeader />
-            <div className="flex justify-center my-4">
-                <TimeCircle 
-                    activities={currentActivities} 
-                    onSelectSlot={handleCircleSelect} 
-                    size={300}
-                    hoveredId={hoveredActivityId}
-                    onHover={setHoveredActivityId}
-                    selectedDate={selectedDate}
-                />
+    return (
+      <div className="flex flex-col min-h-full bg-[#020202]">
+         {/* STICKY MINI HEADER */}
+         <motion.div 
+           style={{ opacity: miniHeaderOpacity, y: miniHeaderY, pointerEvents: miniHeaderPointerEvents }}
+           className="fixed top-0 left-0 right-0 z-40 bg-black/90 backdrop-blur-md border-b border-white/10 px-6 py-4 pt-safe-top flex items-center justify-between"
+         >
+            <div className="flex flex-col">
+               <span className="type-label text-zinc-500">Active Protocol</span>
+               <span className="type-h3 text-white truncate max-w-[200px]">{currentProtocolName || 'No Protocol'}</span>
             </div>
-       </div>
-
-       <div className="bg-[#020202] relative z-30 px-4 pt-8 pb-40">
-            <div className="flex items-center justify-between px-2 mb-6">
-                <h3 className="type-h2 text-white">Protocol</h3>
-                <div className="flex gap-4">
-                    <Button size="icon" variant="secondary" onClick={toggleProtocolMenu} icon={<BookTemplate />} />
-                    <Button size="icon" variant="primary" onClick={(e) => openInject(null, e)} icon={<Plus />} />
-                </div>
+            <div className="flex items-center gap-4">
+               {syncStatus === 'SYNCING' && <RefreshCw className="w-4 h-4 text-cyan-500 animate-spin" />}
+               <span className="type-mono-body text-cyan-400">
+                  {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+               </span>
             </div>
-
-            {currentProtocolName ? (
-                <SlotList 
-                    activities={currentActivities} 
-                    selectedDate={selectedDate}
-                    onEdit={handleSlotEdit}
-                    onHover={setHoveredActivityId}
-                    hoveredId={hoveredActivityId}
-                    selectedId={selectedActivityId}
-                    onSelect={handleSlotSelect}
-                    onOpenContext={handleOpenSheet}
-                />
-            ) : (
-                <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-zinc-800 rounded-[3rem] bg-zinc-900/20">
-                    <AlertTriangle className="w-16 h-16 text-zinc-700 mb-6" />
-                    <h3 className="type-body text-zinc-500 uppercase mb-4">No Signal</h3>
-                    <Button size="md" variant="secondary" onClick={(e) => toggleProtocolMenu(e)}>Assign Protocol</Button>
-                </div>
-            )}
-       </div>
-
-       <ProtocolContextMenu 
-          isOpen={showProtocolMenu} 
-          onClose={() => setShowProtocolMenu(false)} 
-          targetDate={selectedDate}
-          coords={menuCoords}
-        />
-    </div>
-  );
+         </motion.div>
+  
+         {/* SCROLLABLE CONTENT WITH SWIPE AREA */}
+         {/* Wrapped in motion.div for Swipe Gesture */}
+         <motion.div 
+             className="w-full flex flex-col gap-8 px-4 pt-8 pb-12 bg-[#020202] touch-pan-y"
+             drag="x"
+             dragConstraints={{ left: 0, right: 0 }}
+             dragElastic={0.2}
+             onDragEnd={handleSwipe}
+         >
+              <DateHeader />
+              <div className="flex justify-center my-4 pointer-events-none">
+                  <div className="pointer-events-auto">
+                    <TimeCircle 
+                        activities={currentActivities} 
+                        onSelectSlot={handleCircleSelect} 
+                        size={300}
+                        hoveredId={hoveredActivityId}
+                        onHover={setHoveredActivityId}
+                        selectedDate={selectedDate}
+                    />
+                  </div>
+              </div>
+         </motion.div>
+  
+         <div className="bg-[#020202] relative z-30 px-4 pt-8 pb-40">
+              <div className="flex items-center justify-between px-2 mb-6">
+                  <h3 className="type-h2 text-white">Protocol</h3>
+                  <div className="flex gap-4">
+                      <Button size="icon" variant="secondary" onClick={toggleProtocolMenu} icon={<BookTemplate />} />
+                      <Button size="icon" variant="primary" onClick={(e) => openInject(null, e)} icon={<Plus />} />
+                  </div>
+              </div>
+  
+              {currentProtocolName ? (
+                  <SlotList 
+                      activities={currentActivities} 
+                      selectedDate={selectedDate}
+                      onEdit={handleSlotEdit}
+                      onHover={setHoveredActivityId}
+                      hoveredId={hoveredActivityId}
+                      selectedId={selectedActivityId}
+                      onSelect={handleSlotSelect}
+                      onOpenContext={handleOpenSheet}
+                  />
+              ) : (
+                  <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-zinc-800 rounded-[3rem] bg-zinc-900/20">
+                      <AlertTriangle className="w-16 h-16 text-zinc-700 mb-6" />
+                      <h3 className="type-body text-zinc-500 uppercase mb-4">No Signal</h3>
+                      <Button size="md" variant="secondary" onClick={(e) => toggleProtocolMenu(e)}>Assign Protocol</Button>
+                  </div>
+              )}
+         </div>
+  
+         <ProtocolContextMenu 
+            isOpen={showProtocolMenu} 
+            onClose={() => setShowProtocolMenu(false)} 
+            targetDate={selectedDate}
+            coords={menuCoords}
+          />
+      </div>
+    );
+  };
 
   const renderDesktopDayView = () => (
      <motion.div

@@ -26,8 +26,6 @@ export const SettingsView: React.FC = () => {
     
     const provider = new GoogleAuthProvider();
     try {
-      // Just authenticate. App.tsx (useEffect) will catch the auth state change,
-      // check Firestore, and either DOWNLOAD or UPLOAD automatically.
       await signInWithPopup(auth, provider);
     } catch (error: any) {
       console.error("Login failed", error);
@@ -58,11 +56,9 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    // RESTORED PADDING: pt-20 pb-20 (5rem), UPDATED desktop px to lg:px-20
     <div className="w-full max-w-[1920px] mx-auto pt-20 pb-20 px-8 lg:px-20">
       <div className="max-w-[70rem] mx-auto pb-32">
         
-        {/* Unified Header Style */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
           <div>
             <h2 className="type-h1 lg:type-display mb-4 text-white">Operator Profile</h2>
@@ -75,9 +71,7 @@ export const SettingsView: React.FC = () => {
         </div>
 
         <div className="space-y-16">
-          {/* Identity Card */}
           <section className="bg-zinc-900/40 rounded-[4rem] p-12 border border-white/5 space-y-10 shadow-2xl relative overflow-hidden">
-            {/* Success State Gradient */}
             {currentUser && <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-cyan-500/5 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2" />}
 
             <div className="flex flex-col gap-6 relative z-10">
@@ -90,13 +84,11 @@ export const SettingsView: React.FC = () => {
                         )}
                     </div>
                     <div className="flex-1 min-w-0">
-                        {/* Always show UserConfig Name (Codename) */}
                         <h3 className="type-h2 text-white truncate">{userConfig.name}</h3>
                         <p className="type-body text-zinc-500 mt-2">{currentUser ? currentUser.email : 'Local Operator'}</p>
                     </div>
                 </div>
 
-                {/* Auth Error Message Display */}
                 <AnimatePresence>
                     {authError && (
                         <motion.div 
@@ -137,12 +129,13 @@ export const SettingsView: React.FC = () => {
               </div>
 
               {/* Cloud Command Center */}
-              <div className="bg-black border border-white/5 rounded-[2rem] p-8 flex flex-col md:flex-row items-center justify-between gap-8">
-                 <div className="flex items-center gap-6">
-                     <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${currentUser ? 'bg-cyan-500/10 text-cyan-400' : 'bg-zinc-900 text-zinc-600'}`}>
+              {/* UPDATED: items-start for mobile, md:items-center for desktop */}
+              <div className="bg-black border border-white/5 rounded-[2rem] p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+                 <div className="flex items-center gap-6 w-full md:w-auto">
+                     <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 ${currentUser ? 'bg-cyan-500/10 text-cyan-400' : 'bg-zinc-900 text-zinc-600'}`}>
                         <Cloud className="w-8 h-8" />
                      </div>
-                     <div className="flex flex-col">
+                     <div className="flex flex-col text-left">
                          <span className="type-body font-bold text-white">Cloud Synchronization</span>
                          <span className="type-caption text-zinc-500 mt-1">
                              {currentUser ? 'Active • Real-time Link' : 'Inactive • Local Only'}
@@ -170,7 +163,6 @@ export const SettingsView: React.FC = () => {
             </div>
           </section>
 
-          {/* Operational Log - Smaller Text */}
           <Card className="p-10 rounded-[3rem] flex items-start gap-8 bg-zinc-900/20 border-dashed">
              <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
                 <Info className="w-8 h-8 text-cyan-500" />
@@ -184,7 +176,6 @@ export const SettingsView: React.FC = () => {
              </div>
           </Card>
 
-          {/* Collapsible Keyboard Shortcuts */}
           <Card className="rounded-[3rem] bg-zinc-900/20 border-dashed overflow-hidden">
              <button 
                 onClick={() => setShowShortcuts(!showShortcuts)}
