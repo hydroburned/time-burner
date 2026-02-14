@@ -5,13 +5,11 @@ import { useStore } from '../../store';
 import { User, Shield, LogOut, Info, Keyboard, ChevronDown, Cloud, AlertCircle, RefreshCw, X } from 'lucide-react';
 import { Card, Button } from '../UI';
 import { ConfirmationModal } from '../ConfirmationModal';
-import { auth, db } from '../../firebase';
+import { auth } from '../../firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { sanitizeForFirestore } from '../../utils';
 
 export const SettingsView: React.FC = () => {
-  const { userConfig, updateUserConfig, currentUser, setPendingSyncDecision, setSyncConflictData } = useStore();
+  const { userConfig, updateUserConfig, currentUser } = useStore();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -26,37 +24,13 @@ export const SettingsView: React.FC = () => {
     setAuthError(null);
     setIsLoggingIn(true);
     
-    // 1. Pause App.tsx sync listeners to prevent race conditions
-    setPendingSyncDecision(true);
-
     const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      // 2. Check Cloud Data
-      const userDocRef = doc(db, 'users', user.uid);
-      const docSnap = await getDoc(userDocRef);
-
-      if (docSnap.exists()) {
-          // 3a. CONFLICT: Data exists in cloud. Ask user.
-          console.log("Cloud data found, triggering conflict modal...");
-          setSyncConflictData(docSnap.data());
-          // NOTE: isPendingSyncDecision remains TRUE. 
-          // It will be set to FALSE by the Modal when the user makes a choice.
-      } else {
-          // 3b. EMPTY CLOUD: Safe to upload local data immediately.
-          console.log("No cloud data found. Uploading local data...");
-          await uploadLocalToCloud(user.uid);
-          
-          // Resume normal sync
-          setPendingSyncDecision(false);
-      }
-
+      // Just authenticate. App.tsx (useEffect) will catch the auth state change,
+      // check Firestore, and either DOWNLOAD or UPLOAD automatically.
+      await signInWithPopup(auth, provider);
     } catch (error: any) {
       console.error("Login failed", error);
-      // IMPORTANT: Reset pending state on error so app doesn't freeze
-      setPendingSyncDecision(false);
       
       if (error.code === 'auth/configuration-not-found') {
           setAuthError("Google Sign-In disabled. Enable 'Google' in Firebase Console > Auth > Sign-in method.");
@@ -74,24 +48,10 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const uploadLocalToCloud = async (uid: string) => {
-      const state = useStore.getState();
-      const payload = sanitizeForFirestore({
-          days: state.days,
-          protocols: state.protocols,
-          userConfig: state.userConfig,
-          energy: state.energy,
-          updatedAt: new Date().toISOString()
-      });
-      await setDoc(doc(db, 'users', uid), payload, { merge: true });
-  };
-
   const handleLogout = async () => {
     try {
       await signOut(auth);
       setAuthError(null);
-      // Ensure pending is false on logout
-      setPendingSyncDecision(false);
     } catch (error) {
       console.error("Logout failed", error);
     }
@@ -110,7 +70,7 @@ export const SettingsView: React.FC = () => {
           </div>
           <div className="flex flex-col items-start md:items-end gap-2 opacity-60">
              <span className="type-label text-white">Time Burner</span>
-             <span className="type-caption text-zinc-500">v1.0.5 // {currentUser ? 'CLOUD SYNC' : 'LOCAL'}</span>
+             <span className="type-caption text-zinc-500">v1.0.6 // {currentUser ? 'CLOUD SYNC' : 'LOCAL'}</span>
           </div>
         </div>
 

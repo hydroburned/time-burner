@@ -8,10 +8,7 @@ import { getDayId } from './utils';
 const DEFAULT_PROTOCOL_ID = 'default-biohacker-v1';
 
 interface ExtendedAppState extends AppState {
-    isPendingSyncDecision: boolean;
-    setPendingSyncDecision: (pending: boolean) => void;
-    syncConflictData: any | null; // Holds the cloud data if a conflict occurs
-    setSyncConflictData: (data: any | null) => void;
+    // Removed conflict flags
 }
 
 export const useStore = create<ExtendedAppState>()(
@@ -22,8 +19,6 @@ export const useStore = create<ExtendedAppState>()(
       selectedDate: getDayId(new Date()),
       energy: 50,
       currentUser: null,
-      isPendingSyncDecision: false, // Default to false so auto-sync works on reload
-      syncConflictData: null,
       
       // Initial Data: Only TODAY has a protocol.
       days: {
@@ -54,9 +49,6 @@ export const useStore = create<ExtendedAppState>()(
       setReturnView: (view: ViewType) => set({ returnView: view }),
 
       setCurrentUser: (user: UserInfo | null) => set({ currentUser: user }),
-      
-      setPendingSyncDecision: (pending: boolean) => set({ isPendingSyncDecision: pending }),
-      setSyncConflictData: (data: any | null) => set({ syncConflictData: data }),
 
       replaceState: (newState: Partial<AppState>) => {
           set((state) => ({
@@ -322,10 +314,8 @@ export const useStore = create<ExtendedAppState>()(
       name: 'time-burner-storage-v14', 
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ 
-          // Exclude transient UI flags from persistence
-          ...state,
-          isPendingSyncDecision: false,
-          syncConflictData: null 
+          // Persist everything except transient UI states if any were added
+          ...state
       })
     }
   )

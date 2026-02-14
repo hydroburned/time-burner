@@ -19,7 +19,6 @@ import { DateHeader } from './components/DateHeader';
 import { ProtocolContextMenu } from './components/ProtocolContextMenu';
 import { ActivityEditor } from './components/ActivityEditor';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { SyncConflictModal } from './components/SyncConflictModal';
 import { Logbook } from './components/Logbook';
 import { BottomSheet } from './components/BottomSheet';
 import { auth, db } from './firebase';
@@ -31,7 +30,7 @@ const App: React.FC = () => {
     view, energy, selectedDate, days, protocols, 
     addActivityToProtocol, updateActivityInProtocol, removeActivityFromProtocol, 
     userConfig, setView, setReturnView, setSelectedDate,
-    currentUser, setCurrentUser, replaceState, isPendingSyncDecision
+    currentUser, setCurrentUser, replaceState
   } = useStore();
   
   // Editor State
@@ -122,22 +121,17 @@ const App: React.FC = () => {
 
     // 2. Setup Realtime Listener (Cloud -> Local)
     const unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
-      // CRITICAL: Prevent auto-updates while user is deciding sync strategy in SettingsView
-      if (useStore.getState().isPendingSyncDecision) {
-          console.log("Skipping cloud update due to pending sync decision");
-          return;
-      }
-
       // CRITICAL: Ignore updates that originate from our own local writes (latency compensation)
       if (docSnap.metadata.hasPendingWrites) return;
 
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data) {
-          console.log("Cloud update received");
+          console.log("SYNC: Cloud data received (Overwriting Local)");
           isRemoteUpdate.current = true;
           
-          // Merge logic: Trust cloud as truth
+          // SCENARIO 1: Phone Login / Sync Update
+          // If cloud has data, we trust it implicitly.
           replaceState({
              days: data.days || {},
              protocols: data.protocols || [],
@@ -149,10 +143,11 @@ const App: React.FC = () => {
           setTimeout(() => { isRemoteUpdate.current = false; }, 1000);
         }
       } else {
-        // Doc doesn't exist, create it with CURRENT local data
-        const state = useStore.getState();
-        console.log("Initializing cloud store with local data...");
+        // SCENARIO 2: First Time Login (No cloud data)
+        // Upload LOCAL data to initialize the Cloud.
+        console.log("SYNC: No cloud data found (Initializing from Local)");
         
+        const state = useStore.getState();
         const payload = sanitizeForFirestore({
             days: state.days,
             protocols: state.protocols,
@@ -162,7 +157,8 @@ const App: React.FC = () => {
         });
 
         setDoc(userDocRef, payload, { merge: true })
-            .catch(err => console.error("Initial creation failed", err));
+            .then(() => console.log("SYNC: Initialization Complete"))
+            .catch(err => console.error("SYNC: Initialization Failed", err));
       }
     }, (error) => {
         console.error("Sync listener error:", error);
@@ -170,9 +166,6 @@ const App: React.FC = () => {
 
     // 3. Setup Store Subscription (Local -> Cloud)
     const unsubscribeStore = useStore.subscribe((state) => {
-        // Prevent upload during sync decision
-        if (state.isPendingSyncDecision) return;
-        
         // If this update came from the cloud, DO NOT echo it back
         if (isRemoteUpdate.current) return;
         
@@ -182,7 +175,7 @@ const App: React.FC = () => {
         setIsSyncing(true);
         saveTimeout.current = setTimeout(async () => {
             // Double check flag inside timeout in case a cloud update came in during the delay
-            if (isRemoteUpdate.current || useStore.getState().isPendingSyncDecision) {
+            if (isRemoteUpdate.current) {
                 setIsSyncing(false);
                 return;
             }
@@ -598,9 +591,6 @@ const App: React.FC = () => {
         confirmLabel="Delete"
         isDangerous
       />
-
-      {/* Sync Conflict Modal - Mounted Globally */}
-      <SyncConflictModal />
 
       {/* MOBILE BOTTOM SHEET FOR LOGBOOK */}
       <BottomSheet
