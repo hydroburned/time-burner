@@ -21,9 +21,10 @@ import { ActivityEditor } from './components/ActivityEditor';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { Logbook } from './components/Logbook';
 import { BottomSheet } from './components/BottomSheet';
-import { auth, db } from './firebase';
+import { auth, db, analytics } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { logEvent } from 'firebase/analytics';
 
 const App: React.FC = () => {
   const { 
@@ -87,6 +88,16 @@ const App: React.FC = () => {
       return () => clearInterval(timer);
   }, []);
 
+  // --- ANALYTICS TRACKING ---
+  useEffect(() => {
+    if (analytics) {
+      logEvent(analytics, 'screen_view', {
+        firebase_screen: view,
+        screen_name: view
+      });
+    }
+  }, [view]);
+
   // --- STRICT SYNC ENGINE V3 ---
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -100,6 +111,9 @@ const App: React.FC = () => {
         console.log("✅ [Auth] User logged in:", user.email);
         setCurrentUser({ uid: user.uid, email: user.email, photoURL: user.photoURL });
         setSyncStatus('SYNCING');
+        
+        // Log Login Event
+        if(analytics) logEvent(analytics, 'login', { method: 'google' });
 
         const userDocRef = doc(db, 'users', user.uid);
 

@@ -49,19 +49,22 @@ const SlotItem: React.FC<SlotItemProps> = ({
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isLongPress = useRef(false);
     const startPos = useRef<{x: number, y: number} | null>(null);
+    const hasMoved = useRef(false);
     
     // Interaction Handlers
     const handlePointerDown = (e: React.PointerEvent) => {
         if (!isMobile) return;
         
         isLongPress.current = false;
+        hasMoved.current = false;
         startPos.current = { x: e.clientX, y: e.clientY };
 
         longPressTimer.current = setTimeout(() => {
-            isLongPress.current = true;
-            // Haptic for long press
-            if (navigator.vibrate) navigator.vibrate(50);
-            handleOpenSheet(activity);
+            if (!hasMoved.current) {
+                isLongPress.current = true;
+                if (navigator.vibrate) navigator.vibrate(50);
+                handleOpenSheet(activity);
+            }
         }, 500); // 500ms threshold for long press
     };
 
@@ -69,7 +72,9 @@ const SlotItem: React.FC<SlotItemProps> = ({
         if (!isMobile || !startPos.current) return;
         
         const dist = Math.hypot(e.clientX - startPos.current.x, e.clientY - startPos.current.y);
-        if (dist > 10) { // If moved more than 10px, cancel long press (scrolling)
+        if (dist > 10) { 
+            // If moved more than 10px, it's a scroll, cancel everything
+            hasMoved.current = true;
             if (longPressTimer.current) {
                 clearTimeout(longPressTimer.current);
                 longPressTimer.current = null;
@@ -85,17 +90,21 @@ const SlotItem: React.FC<SlotItemProps> = ({
             longPressTimer.current = null;
         }
 
-        // If not a long press (and not scrolled away), check area and treat as tap
-        if (!isLongPress.current && startPos.current) {
+        // Only process click if we haven't moved (scrolled) and haven't triggered long press
+        if (!hasMoved.current && !isLongPress.current && startPos.current) {
              const rect = e.currentTarget.getBoundingClientRect();
              const clickX = e.clientX - rect.left;
+             
              // Logic: If click is in the first 50% of the card, toggle.
-             // Otherwise, do nothing (allows scrolling on the right side).
              if (clickX <= rect.width * 0.5) {
                  handleToggle(activity);
+             } else {
+                 // Right side: Select for logbook details (only if it wasn't a scroll)
+                 if (onSelect) onSelect(activity.id);
              }
         }
         startPos.current = null;
+        hasMoved.current = false;
     };
     
     // ---
@@ -113,7 +122,7 @@ const SlotItem: React.FC<SlotItemProps> = ({
     };
 
     const handleBodyClick = () => {
-        // Desktop selection
+        // Desktop selection only via onClick. Mobile handles it in handlePointerUp
         if (!isMobile && onSelect) {
             onSelect(activity.id);
         }
