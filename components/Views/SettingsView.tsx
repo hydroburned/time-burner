@@ -2,18 +2,23 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../../store';
-import { User, Shield, LogOut, Info, Keyboard, ChevronDown, Cloud, AlertCircle, RefreshCw, X } from 'lucide-react';
+import { User, Shield, LogOut, Info, Keyboard, ChevronDown, Cloud, AlertCircle, RefreshCw, X, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { Card, Button } from '../UI';
 import { ConfirmationModal } from '../ConfirmationModal';
-import { auth } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { sanitizeForFirestore } from '../../utils';
 
 export const SettingsView: React.FC = () => {
-  const { userConfig, updateUserConfig, currentUser } = useStore();
+  const { userConfig, updateUserConfig, currentUser, setPendingSyncDecision, replaceState } = useStore();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  
+  // Sync Conflict State
+  const [showSyncConflict, setShowSyncConflict] = useState(false);
 
   const handleReset = () => {
       localStorage.clear();
@@ -23,12 +28,36 @@ export const SettingsView: React.FC = () => {
   const handleGoogleLogin = async () => {
     setAuthError(null);
     setIsLoggingIn(true);
+    
+    // Pause automatic syncing in App.tsx
+    setPendingSyncDecision(true);
+
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check if data exists in cloud
+      const userDocRef = doc(db, 'users', user.uid);
+      const docSnap = await getDoc(userDocRef);
+
+      if (docSnap.exists()) {
+          // CONFLICT DETECTED: Ask user what to do
+          setIsLoggingIn(false);
+          setShowSyncConflict(true);
+          // NOTE: isPendingSyncDecision remains TRUE here, blocking App.tsx from auto-merging
+      } else {
+          // NO DATA IN CLOUD: Safe to upload local data immediately
+          console.log("No cloud data found. Uploading local data...");
+          await uploadLocalToCloud(user.uid);
+          setPendingSyncDecision(false);
+          setIsLoggingIn(false);
+      }
+
     } catch (error: any) {
       console.error("Login failed", error);
       setIsLoggingIn(false);
+      setPendingSyncDecision(false); // Reset on error
       
       // Handle specific Firebase errors
       if (error.code === 'auth/configuration-not-found') {
@@ -36,16 +65,59 @@ export const SettingsView: React.FC = () => {
       } else if (error.code === 'auth/unauthorized-domain') {
           setAuthError(`Domain unauthorized. Add '${window.location.hostname}' to Firebase Console > Auth > Settings > Authorized Domains.`);
       } else if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-          // User closed popup, just reset state
           setAuthError(null);
       } else if (error.code === 'auth/popup-blocked') {
           setAuthError("Pop-up blocked. Please allow pop-ups for this site to sign in.");
       } else {
           setAuthError(error.message || "Authentication failed.");
       }
-    } finally {
-        setIsLoggingIn(false);
     }
+  };
+
+  const uploadLocalToCloud = async (uid: string) => {
+      const state = useStore.getState();
+      const payload = sanitizeForFirestore({
+          days: state.days,
+          protocols: state.protocols,
+          userConfig: state.userConfig,
+          energy: state.energy,
+          updatedAt: new Date().toISOString()
+      });
+      await setDoc(doc(db, 'users', uid), payload, { merge: true });
+  };
+
+  const handleSyncChoice = async (choice: 'KEEP_LOCAL' | 'USE_CLOUD') => {
+      setShowSyncConflict(false);
+      setIsLoggingIn(true); // Show spinner while processing
+      
+      try {
+          if (!auth.currentUser) throw new Error("No user authenticated");
+
+          if (choice === 'KEEP_LOCAL') {
+              // Overwrite cloud with local
+              await uploadLocalToCloud(auth.currentUser.uid);
+              // Now release the lock, App.tsx will see the update (or ignore it as local)
+          } else {
+              // Overwrite local with cloud
+              // We manually fetch and replace state here to be instant
+              const docSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+              if (docSnap.exists()) {
+                  const data = docSnap.data();
+                  replaceState({
+                    days: data.days || {},
+                    protocols: data.protocols || [],
+                    userConfig: { ...userConfig, ...(data.userConfig || {}) },
+                    energy: data.energy ?? 50
+                  });
+              }
+          }
+      } catch (e) {
+          console.error("Sync resolution failed", e);
+          setAuthError("Failed to synchronize data.");
+      } finally {
+          setIsLoggingIn(false);
+          setPendingSyncDecision(false); // Re-enable background sync
+      }
   };
 
   const handleLogout = async () => {
@@ -75,7 +147,7 @@ export const SettingsView: React.FC = () => {
         </div>
 
         <div className="space-y-16">
-          {/* Styled to match Protocol Card */}
+          {/* Identity Card */}
           <section className="bg-zinc-900/40 rounded-[4rem] p-12 border border-white/5 space-y-10 shadow-2xl relative overflow-hidden">
             {/* Success State Gradient */}
             {currentUser && <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-cyan-500/5 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2" />}
@@ -90,28 +162,10 @@ export const SettingsView: React.FC = () => {
                         )}
                     </div>
                     <div className="flex-1 min-w-0">
-                        {/* Reduced to type-h2 */}
-                        <h3 className="type-h2 text-white truncate">{currentUser ? currentUser.email : userConfig.name}</h3>
-                        <p className="type-body text-zinc-500 mt-2">{currentUser ? 'Cloud Synchronization Active' : userConfig.bio}</p>
+                        {/* Always show UserConfig Name (Codename) */}
+                        <h3 className="type-h2 text-white truncate">{userConfig.name}</h3>
+                        <p className="type-body text-zinc-500 mt-2">{currentUser ? currentUser.email : 'Local Operator'}</p>
                     </div>
-                    
-                    {/* Login/Logout Button */}
-                    {currentUser ? (
-                        <Button variant="secondary" size="md" onClick={handleLogout} className="shrink-0" icon={<LogOut />}>
-                            Sign Out
-                        </Button>
-                    ) : (
-                        <Button 
-                            variant="primary" 
-                            size="md" 
-                            onClick={handleGoogleLogin} 
-                            className="shrink-0 relative overflow-hidden" 
-                            icon={isLoggingIn ? <RefreshCw className="animate-spin" /> : <Cloud />}
-                            disabled={isLoggingIn}
-                        >
-                            {isLoggingIn ? 'Syncing...' : 'Sync with Google'}
-                        </Button>
-                    )}
                 </div>
 
                 {/* Auth Error Message Display */}
@@ -150,18 +204,40 @@ export const SettingsView: React.FC = () => {
                   type="text" 
                   value={userConfig.name}
                   onChange={(e) => updateUserConfig({ name: e.target.value })}
-                  // Reduced to type-h3
                   className="w-full bg-black border border-white/5 rounded-[2rem] px-8 h-24 type-h3 font-bold focus:border-cyan-500 outline-none transition-all focus:bg-zinc-900 text-white"
                 />
               </div>
 
-              <div className="space-y-4">
-                <label className="type-label text-zinc-500 pl-2">Protocol Philosophy</label>
-                <textarea 
-                  value={userConfig.bio}
-                  onChange={(e) => updateUserConfig({ bio: e.target.value })}
-                  className="w-full bg-black border border-white/5 rounded-[2rem] px-8 py-6 type-body focus:border-cyan-500 outline-none h-48 resize-none font-medium transition-all focus:bg-zinc-900 text-white"
-                />
+              {/* Cloud Command Center (Replaces Bio) */}
+              <div className="bg-black border border-white/5 rounded-[2rem] p-8 flex flex-col md:flex-row items-center justify-between gap-8">
+                 <div className="flex items-center gap-6">
+                     <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${currentUser ? 'bg-cyan-500/10 text-cyan-400' : 'bg-zinc-900 text-zinc-600'}`}>
+                        <Cloud className="w-8 h-8" />
+                     </div>
+                     <div className="flex flex-col">
+                         <span className="type-body font-bold text-white">Cloud Synchronization</span>
+                         <span className="type-caption text-zinc-500 mt-1">
+                             {currentUser ? 'Active • Real-time Link' : 'Inactive • Local Only'}
+                         </span>
+                     </div>
+                 </div>
+
+                 {currentUser ? (
+                    <Button variant="secondary" size="md" onClick={handleLogout} className="shrink-0 w-full md:w-auto" icon={<LogOut />}>
+                        Disconnect
+                    </Button>
+                ) : (
+                    <Button 
+                        variant="primary" 
+                        size="md" 
+                        onClick={handleGoogleLogin} 
+                        className="shrink-0 relative overflow-hidden w-full md:w-auto" 
+                        icon={isLoggingIn ? <RefreshCw className="animate-spin" /> : <Cloud />}
+                        disabled={isLoggingIn}
+                    >
+                        {isLoggingIn ? 'Connecting...' : 'Sync with Google'}
+                    </Button>
+                )}
               </div>
             </div>
           </section>
@@ -253,6 +329,66 @@ export const SettingsView: React.FC = () => {
             </button>
           </section>
         </div>
+
+        {/* Sync Conflict Modal */}
+        <AnimatePresence>
+            {showSyncConflict && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                     <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 bg-black/90 backdrop-blur-md"
+                     />
+                     <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                        className="relative w-full max-w-[60rem] bg-zinc-950 border border-white/10 rounded-[4rem] p-12 shadow-2xl overflow-hidden"
+                     >
+                        <div className="flex flex-col gap-10">
+                            <div className="text-center">
+                                <h3 className="type-h1 text-white mb-4">Sync Conflict Detected</h3>
+                                <p className="type-body text-zinc-400 max-w-[40rem] mx-auto">
+                                    Existing data found in the cloud. Choose which version to keep. 
+                                    This action <span className="text-white font-bold">cannot be undone</span>.
+                                </p>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-6">
+                                {/* Keep Local Option */}
+                                <button 
+                                    onClick={() => handleSyncChoice('KEEP_LOCAL')}
+                                    className="flex flex-col items-center gap-6 p-10 rounded-[3rem] bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-cyan-500/50 transition-all group"
+                                >
+                                    <div className="w-20 h-20 rounded-full bg-cyan-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <ArrowUpCircle className="w-10 h-10 text-cyan-400" />
+                                    </div>
+                                    <div className="text-center">
+                                        <h4 className="type-h3 text-white mb-2">Keep Local</h4>
+                                        <p className="type-mono-sm text-zinc-500">Overwrite cloud with current device data</p>
+                                    </div>
+                                </button>
+
+                                {/* Use Cloud Option */}
+                                <button 
+                                    onClick={() => handleSyncChoice('USE_CLOUD')}
+                                    className="flex flex-col items-center gap-6 p-10 rounded-[3rem] bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-purple-500/50 transition-all group"
+                                >
+                                    <div className="w-20 h-20 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <ArrowDownCircle className="w-10 h-10 text-purple-400" />
+                                    </div>
+                                    <div className="text-center">
+                                        <h4 className="type-h3 text-white mb-2">Use Cloud</h4>
+                                        <p className="type-mono-sm text-zinc-500">Overwrite this device with cloud data</p>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                     </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
 
         <ConfirmationModal 
           isOpen={showResetConfirm}

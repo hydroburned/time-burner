@@ -13,7 +13,7 @@ import { SettingsView } from './components/Views/SettingsView';
 import { ProtocolManager } from './components/Views/TemplateManager';
 import { Onboarding } from './components/Onboarding';
 import { Activity, ActivityDefinition } from './types';
-import { getComputedActivities } from './utils';
+import { getComputedActivities, sanitizeForFirestore } from './utils';
 import { Button } from './components/UI';
 import { DateHeader } from './components/DateHeader';
 import { ProtocolContextMenu } from './components/ProtocolContextMenu';
@@ -30,7 +30,7 @@ const App: React.FC = () => {
     view, energy, selectedDate, days, protocols, 
     addActivityToProtocol, updateActivityInProtocol, removeActivityFromProtocol, 
     userConfig, setView, setReturnView, setSelectedDate,
-    currentUser, setCurrentUser, replaceState
+    currentUser, setCurrentUser, replaceState, isPendingSyncDecision
   } = useStore();
   
   // Editor State
@@ -54,6 +54,10 @@ const App: React.FC = () => {
   
   // Sync State
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Sync Refs to prevent closure staleness and loops
+  const isRemoteUpdate = useRef(false);
+  const saveTimeout = useRef<any>(null);
 
   // Mobile / Scroll State
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
@@ -113,66 +117,99 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser) return;
 
-    // 2. Setup Realtime Listener (Cloud -> Local)
     const userDocRef = doc(db, 'users', currentUser.uid);
-    let isRemoteUpdate = false;
 
+    // 2. Setup Realtime Listener (Cloud -> Local)
     const unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
+      // CRITICAL: Prevent auto-updates while user is deciding sync strategy in SettingsView
+      if (useStore.getState().isPendingSyncDecision) {
+          console.log("Skipping cloud update due to pending sync decision");
+          return;
+      }
+
+      // CRITICAL: Ignore updates that originate from our own local writes (latency compensation)
+      if (docSnap.metadata.hasPendingWrites) return;
+
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data) {
-          isRemoteUpdate = true;
-          // Merge logic: We trust cloud as truth when it updates
+          console.log("Cloud update received");
+          isRemoteUpdate.current = true;
+          
+          // Merge logic: Trust cloud as truth
           replaceState({
-             days: data.days,
-             protocols: data.protocols,
-             userConfig: { ...userConfig, ...data.userConfig },
-             energy: data.energy
+             days: data.days || {},
+             protocols: data.protocols || [],
+             userConfig: { ...userConfig, ...(data.userConfig || {}) },
+             energy: data.energy ?? 50
           });
-          // Reset flag after a short delay to allow re-enabling upload
-          setTimeout(() => { isRemoteUpdate = false; }, 500);
+
+          // Reset flag after state settles to allow future local edits
+          setTimeout(() => { isRemoteUpdate.current = false; }, 1000);
         }
       } else {
-        // Doc doesn't exist, create it with local data
-        setDoc(userDocRef, {
-            days,
-            protocols,
-            userConfig,
-            energy
-        }, { merge: true });
+        // Doc doesn't exist, create it with CURRENT local data
+        const state = useStore.getState();
+        console.log("Initializing cloud store with local data...");
+        
+        const payload = sanitizeForFirestore({
+            days: state.days,
+            protocols: state.protocols,
+            userConfig: state.userConfig,
+            energy: state.energy,
+            createdAt: new Date().toISOString()
+        });
+
+        setDoc(userDocRef, payload, { merge: true })
+            .catch(err => console.error("Initial creation failed", err));
       }
+    }, (error) => {
+        console.error("Sync listener error:", error);
     });
 
     // 3. Setup Store Subscription (Local -> Cloud)
-    // We use a debounced save function to avoid spamming Firestore
-    let saveTimeout: any;
-    
     const unsubscribeStore = useStore.subscribe((state) => {
-        if (!currentUser || isRemoteUpdate) return;
+        // Prevent upload during sync decision
+        if (state.isPendingSyncDecision) return;
+        
+        // If this update came from the cloud, DO NOT echo it back
+        if (isRemoteUpdate.current) return;
+        
+        // Debounce the save to prevent spamming Firestore
+        if (saveTimeout.current) clearTimeout(saveTimeout.current);
         
         setIsSyncing(true);
-        if (saveTimeout) clearTimeout(saveTimeout);
-        
-        saveTimeout = setTimeout(() => {
-            setDoc(userDocRef, {
-                days: state.days,
-                protocols: state.protocols,
-                userConfig: state.userConfig,
-                energy: state.energy,
-                updatedAt: new Date().toISOString()
-            }, { merge: true }).then(() => {
+        saveTimeout.current = setTimeout(async () => {
+            // Double check flag inside timeout in case a cloud update came in during the delay
+            if (isRemoteUpdate.current || useStore.getState().isPendingSyncDecision) {
                 setIsSyncing(false);
-            }).catch(e => {
-                console.error("Sync failed", e);
+                return;
+            }
+
+            try {
+                if (!auth.currentUser) return;
+
+                const payload = sanitizeForFirestore({
+                    days: state.days,
+                    protocols: state.protocols,
+                    userConfig: state.userConfig,
+                    energy: state.energy,
+                    updatedAt: new Date().toISOString()
+                });
+
+                await setDoc(userDocRef, payload, { merge: true });
+            } catch (error) {
+                console.error("Sync failed", error);
+            } finally {
                 setIsSyncing(false);
-            });
+            }
         }, 2000); // 2 second debounce
     });
 
     return () => {
         unsubscribeSnapshot();
         unsubscribeStore();
-        if (saveTimeout) clearTimeout(saveTimeout);
+        if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
   }, [currentUser?.uid]); // Only re-run if UID changes
 

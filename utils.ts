@@ -110,3 +110,9 @@ export const describeArc = (x: number, y: number, radius: number, startAngle: nu
 
   return d;
 };
+
+export const sanitizeForFirestore = (data: any): any => {
+    // Quick and dirty way to strip undefined values which cause Firestore to crash
+    // Also removes functions/symbols which shouldn't be there anyway
+    return JSON.parse(JSON.stringify(data));
+};

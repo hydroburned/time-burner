@@ -7,7 +7,12 @@ import { getDayId } from './utils';
 
 const DEFAULT_PROTOCOL_ID = 'default-biohacker-v1';
 
-export const useStore = create<AppState>()(
+interface ExtendedAppState extends AppState {
+    isPendingSyncDecision: boolean;
+    setPendingSyncDecision: (pending: boolean) => void;
+}
+
+export const useStore = create<ExtendedAppState>()(
   persist(
     (set, get) => ({
       view: 'DAY',
@@ -15,6 +20,7 @@ export const useStore = create<AppState>()(
       selectedDate: getDayId(new Date()),
       energy: 50,
       currentUser: null,
+      isPendingSyncDecision: false, // Default to false so auto-sync works on reload
       
       // Initial Data: Only TODAY has a protocol.
       days: {
@@ -46,6 +52,8 @@ export const useStore = create<AppState>()(
 
       setCurrentUser: (user: UserInfo | null) => set({ currentUser: user }),
       
+      setPendingSyncDecision: (pending: boolean) => set({ isPendingSyncDecision: pending }),
+
       replaceState: (newState: Partial<AppState>) => {
           set((state) => ({
               ...state,
@@ -309,6 +317,11 @@ export const useStore = create<AppState>()(
     {
       name: 'time-burner-storage-v14', 
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ 
+          // Exclude transient UI flags from persistence
+          ...state,
+          isPendingSyncDecision: false 
+      })
     }
   )
 );
