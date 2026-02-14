@@ -19,6 +19,7 @@ import { DateHeader } from './components/DateHeader';
 import { ProtocolContextMenu } from './components/ProtocolContextMenu';
 import { ActivityEditor } from './components/ActivityEditor';
 import { ConfirmationModal } from './components/ConfirmationModal';
+import { SyncConflictModal } from './components/SyncConflictModal';
 import { Logbook } from './components/Logbook';
 import { BottomSheet } from './components/BottomSheet';
 import { auth, db } from './firebase';
@@ -597,6 +598,9 @@ const App: React.FC = () => {
         confirmLabel="Delete"
         isDangerous
       />
+
+      {/* Sync Conflict Modal - Mounted Globally */}
+      <SyncConflictModal />
 
       {/* MOBILE BOTTOM SHEET FOR LOGBOOK */}
       <BottomSheet
