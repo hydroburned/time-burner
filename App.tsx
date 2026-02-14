@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-import { Plus, BookTemplate, Info, AlertTriangle, Menu, Cloud, RefreshCw, CheckCircle2, WifiOff } from 'lucide-react';
+import { Plus, BookTemplate, AlertTriangle, RefreshCw, CheckCircle2, WifiOff, Lock } from 'lucide-react';
 import { useStore } from './store';
 import { Navigation } from './components/Navigation';
 import { TimeCircle } from './components/TimeCircle';
@@ -29,7 +29,7 @@ const App: React.FC = () => {
   const { 
     view, energy, selectedDate, days, protocols, 
     addActivityToProtocol, updateActivityInProtocol, removeActivityFromProtocol, 
-    userConfig, setView, setReturnView, setSelectedDate,
+    userConfig, setView, setSelectedDate,
     currentUser, setCurrentUser, replaceState
   } = useStore();
   
@@ -53,9 +53,12 @@ const App: React.FC = () => {
   const [menuCoords, setMenuCoords] = useState<{x: number, y: number} | null>(null);
   
   // Sync State
-  const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'ERROR' | 'OFFLINE'>('IDLE');
+  const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'ERROR' | 'OFFLINE' | 'DENIED'>('IDLE');
+  
+  // REFS for logic (avoids re-renders loops)
   const isRemoteUpdate = useRef(false);
   const saveTimeout = useRef<any>(null);
+  const unsubscribeSnapshotRef = useRef<(() => void) | null>(null);
 
   // Mobile / Scroll State
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
@@ -84,95 +87,125 @@ const App: React.FC = () => {
       return () => clearInterval(timer);
   }, []);
 
-  // --- STRICT SYNC ENGINE ---
+  // --- STRICT SYNC ENGINE V3 ---
   useEffect(() => {
-    let unsubscribeSnapshot: () => void = () => {};
-
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      // 1. Cleanup old listeners
+      if (unsubscribeSnapshotRef.current) {
+         unsubscribeSnapshotRef.current();
+         unsubscribeSnapshotRef.current = null;
+      }
+
       if (user) {
+        console.log("✅ [Auth] User logged in:", user.email);
         setCurrentUser({ uid: user.uid, email: user.email, photoURL: user.photoURL });
         setSyncStatus('SYNCING');
 
         const userDocRef = doc(db, 'users', user.uid);
 
         try {
-            // 1. INITIAL FETCH
-            const docSnap = await getDoc(userDocRef);
+            // A. Initial Check (Get Once) with Timeout Safety
+            const fetchPromise = getDoc(userDocRef);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000));
+
+            const docSnap: any = await Promise.race([fetchPromise, timeoutPromise]);
             
             if (docSnap.exists()) {
-                console.log("🔥 [Cloud] Data found. Downloading...");
+                console.log("⬇️ [Sync] Cloud data found. Hydrating...");
                 const data = docSnap.data();
                 if (data) {
-                    isRemoteUpdate.current = true;
+                    isRemoteUpdate.current = true; 
                     replaceState(data);
-                    // Short timeout to allow state to settle before enabling upload listener
-                    setTimeout(() => { isRemoteUpdate.current = false; }, 500);
+                    setTimeout(() => { isRemoteUpdate.current = false; }, 1000);
                 }
             } else {
-                console.log("🔥 [Cloud] No data. Uploading local data...");
+                console.log("⬆️ [Sync] New user. Uploading local state...");
                 const payload = sanitizeForFirestore(useStore.getState());
                 await setDoc(userDocRef, payload);
             }
             setSyncStatus('IDLE');
 
-            // 2. REALTIME LISTENER (Cloud -> Local)
-            unsubscribeSnapshot = onSnapshot(userDocRef, (doc) => {
-                // Ignore local writes that are echoing back
-                if (doc.metadata.hasPendingWrites) return;
+            // B. Setup Realtime Listener
+            const unsub = onSnapshot(userDocRef, (doc) => {
+                // Skip if this update was caused by us (latency compensation)
+                if (doc.metadata.hasPendingWrites) return; 
 
                 const data = doc.data();
                 if (data) {
-                    console.log("🔥 [Sync] Incoming update");
+                    console.log("🔄 [Sync] Remote update received");
                     isRemoteUpdate.current = true;
                     replaceState(data);
                     setSyncStatus('IDLE');
-                    setTimeout(() => { isRemoteUpdate.current = false; }, 500);
+                    setTimeout(() => { isRemoteUpdate.current = false; }, 1000);
                 }
-            }, (err) => {
-                console.error("Snapshot error:", err);
-                setSyncStatus('ERROR');
+            }, (error) => {
+                console.error("❌ [Sync] Snapshot Error:", error);
+                if (error.code === 'permission-denied') {
+                    setSyncStatus('DENIED');
+                } else {
+                    setSyncStatus('ERROR');
+                }
             });
 
-        } catch (error) {
-            console.error("Sync Initialization Error:", error);
-            setSyncStatus('ERROR');
+            unsubscribeSnapshotRef.current = unsub;
+
+        } catch (error: any) {
+            console.error("❌ [Sync] Init Failed:", error);
+            if (error.code === 'permission-denied') {
+                setSyncStatus('DENIED');
+            } else {
+                setSyncStatus('ERROR');
+            }
         }
 
       } else {
+        console.log("👋 [Auth] User logged out");
         setCurrentUser(null);
         setSyncStatus('OFFLINE');
       }
     });
 
-    // 3. STORE LISTENER (Local -> Cloud)
+    return () => {
+        unsubscribeAuth();
+        if (unsubscribeSnapshotRef.current) unsubscribeSnapshotRef.current();
+    };
+  }, []);
+
+  // --- LOCAL TO CLOUD TRIGGER ---
+  useEffect(() => {
     const unsubscribeStore = useStore.subscribe((state) => {
         if (!auth.currentUser) return;
-        if (isRemoteUpdate.current) return; // Don't echo cloud updates
+        if (isRemoteUpdate.current) return; 
 
         setSyncStatus('SYNCING');
         
         if (saveTimeout.current) clearTimeout(saveTimeout.current);
         
         saveTimeout.current = setTimeout(async () => {
-             if (isRemoteUpdate.current) return;
+             if (isRemoteUpdate.current) {
+                 setSyncStatus('IDLE');
+                 return;
+             }
 
              try {
                  const payload = sanitizeForFirestore(state);
                  await setDoc(doc(db, 'users', auth.currentUser!.uid), payload, { merge: true });
                  setSyncStatus('IDLE');
-             } catch (e) {
-                 console.error("Upload failed", e);
-                 setSyncStatus('ERROR');
+             } catch (e: any) {
+                 console.error("❌ [Sync] Upload failed:", e);
+                 if (e.code === 'permission-denied') {
+                     setSyncStatus('DENIED');
+                 } else {
+                     setSyncStatus('ERROR');
+                 }
              }
-        }, 2000); // 2s Debounce
+        }, 2000);
     });
 
     return () => {
-        unsubscribeAuth();
-        unsubscribeSnapshot();
         unsubscribeStore();
         if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    };
+    }
   }, []);
 
   // Keyboard Navigation for Dates
@@ -216,29 +249,19 @@ const App: React.FC = () => {
   // --- Handlers ---
 
   const openInject = (activity: Activity | null = null, e?: React.MouseEvent) => {
-    // Cannot edit virtual slots
     if (activity && activity.id.startsWith('virtual-')) return;
-    
-    // If no protocol, warn or prompt user
     if (!currentProtocolId) {
         setMenuCoords(e ? { x: e.clientX, y: e.clientY } : null);
         setShowProtocolMenu(true);
         return;
     }
-    
     setEditingActivity(activity);
     setShowEditor(true);
   };
 
   const handleSaveActivity = (def: ActivityDefinition) => {
     if (!currentProtocolId) return;
-
-    // Preserve the ID if editing, or create new if adding
-    const finalDef = {
-      ...def,
-      id: editingActivity?.id || crypto.randomUUID()
-    };
-
+    const finalDef = { ...def, id: editingActivity?.id || crypto.randomUUID() };
     if (editingActivity) {
       updateActivityInProtocol(currentProtocolId, finalDef);
     } else {
@@ -284,9 +307,7 @@ const App: React.FC = () => {
   // --- Views Renders ---
 
   const renderMobileDayView = () => (
-    // Updated: h-full overflow-y-auto to handle scroll internally within the fixed app container
     <div className="flex flex-col min-h-full bg-[#020202]">
-       
        {/* STICKY MINI HEADER */}
        <motion.div 
          style={{ opacity: miniHeaderOpacity, y: miniHeaderY, pointerEvents: miniHeaderPointerEvents }}
@@ -305,11 +326,8 @@ const App: React.FC = () => {
        </motion.div>
 
        {/* SCROLLABLE CONTENT */}
-       
-       {/* 1. Large Header & Clock */}
        <div className="w-full flex flex-col gap-8 px-4 pt-8 pb-12 bg-[#020202]">
             <DateHeader />
-            
             <div className="flex justify-center my-4">
                 <TimeCircle 
                     activities={currentActivities} 
@@ -322,9 +340,7 @@ const App: React.FC = () => {
             </div>
        </div>
 
-       {/* 2. List Area */}
        <div className="bg-[#020202] relative z-30 px-4 pt-8 pb-40">
-            {/* List Controls */}
             <div className="flex items-center justify-between px-2 mb-6">
                 <h3 className="type-h2 text-white">Protocol</h3>
                 <div className="flex gap-4">
@@ -333,7 +349,6 @@ const App: React.FC = () => {
                 </div>
             </div>
 
-            {/* Slot List */}
             {currentProtocolName ? (
                 <SlotList 
                     activities={currentActivities} 
@@ -354,7 +369,6 @@ const App: React.FC = () => {
             )}
        </div>
 
-       {/* MOBILE MENUS */}
        <ProtocolContextMenu 
           isOpen={showProtocolMenu} 
           onClose={() => setShowProtocolMenu(false)} 
@@ -372,7 +386,6 @@ const App: React.FC = () => {
         exit={{ opacity: 0 }}
         className="flex flex-row h-full overflow-hidden w-full gap-0"
       >
-        {/* LEFT COLUMN */}
         <div className="flex flex-col relative z-10 w-[50rem] shrink-0 h-full py-12 bg-transparent justify-between border-r border-white/5">
            <div className="w-full px-8 z-50">
               <DateHeader />
@@ -397,10 +410,8 @@ const App: React.FC = () => {
            </div>
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="flex-1 w-full h-full flex flex-row bg-[#020202]">
           <div className="flex-1 flex flex-col h-full border-r border-white/5 min-w-0 relative">
-              {/* Header */}
               <div className="px-8 pt-12 pb-8 shrink-0 bg-[#020202] z-20 border-b border-white/5">
                 <div className="flex flex-wrap items-center justify-between gap-4 min-h-[48px]">
                     <div className="flex flex-col justify-center min-w-0">
@@ -411,11 +422,13 @@ const App: React.FC = () => {
                              <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${
                                  syncStatus === 'SYNCING' ? 'bg-cyan-900/20 border-cyan-500/20 text-cyan-400' :
                                  syncStatus === 'ERROR' ? 'bg-red-900/20 border-red-500/20 text-red-400' :
+                                 syncStatus === 'DENIED' ? 'bg-orange-900/20 border-orange-500/20 text-orange-400' :
                                  'bg-zinc-800 border-white/5 text-zinc-500'
                              }`}>
                                  {syncStatus === 'SYNCING' && <RefreshCw className="w-3 h-3 animate-spin" />}
                                  {syncStatus === 'IDLE' && <CheckCircle2 className="w-3 h-3" />}
                                  {syncStatus === 'ERROR' && <WifiOff className="w-3 h-3" />}
+                                 {syncStatus === 'DENIED' && <Lock className="w-3 h-3" />}
                                  <span className="text-[10px] font-bold uppercase tracking-wider">
                                      {syncStatus === 'IDLE' ? 'Synced' : syncStatus}
                                  </span>
@@ -456,7 +469,6 @@ const App: React.FC = () => {
                   </div>
               </div>
 
-              {/* SLOT LIST */}
               <div className="flex-1 overflow-y-auto px-8 py-8 custom-scrollbar">
                   {currentProtocolName ? (
                     <SlotList 
