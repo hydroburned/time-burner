@@ -2,18 +2,20 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../../store';
-import { User, Shield, LogOut, Info, Keyboard, ChevronDown, Cloud, AlertCircle, RefreshCw, X } from 'lucide-react';
+import { User, Shield, LogOut, Info, Keyboard, ChevronDown, Cloud, AlertCircle, RefreshCw, X, PlayCircle, Globe } from 'lucide-react';
 import { Card, Button } from '../UI';
 import { ConfirmationModal } from '../ConfirmationModal';
 import { auth } from '../../firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const SettingsView: React.FC = () => {
-  const { userConfig, updateUserConfig, currentUser } = useStore();
+  const { userConfig, updateUserConfig, currentUser, restartOnboarding, setLanguage } = useStore();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const t = useTranslation();
   
   const handleReset = () => {
       localStorage.clear();
@@ -23,23 +25,17 @@ export const SettingsView: React.FC = () => {
   const handleGoogleLogin = async () => {
     setAuthError(null);
     setIsLoggingIn(true);
-    
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
       console.error("Login failed", error);
-      
       if (error.code === 'auth/configuration-not-found') {
           setAuthError("Google Sign-In disabled. Enable 'Google' in Firebase Console > Auth > Sign-in method.");
       } else if (error.code === 'auth/unauthorized-domain') {
-          setAuthError(`Domain unauthorized. Add '${window.location.hostname}' to Firebase Console > Auth > Settings > Authorized Domains.`);
-      } else if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-          setAuthError(null);
-      } else if (error.code === 'auth/popup-blocked') {
-          setAuthError("Pop-up blocked. Please allow pop-ups for this site to sign in.");
+          setAuthError(`Domain unauthorized. Add '${window.location.hostname}' to Firebase Console.`);
       } else {
-          setAuthError(error.message || "Authentication failed.");
+          setAuthError(error.message || t.settings.auth_failed);
       }
     } finally {
         setIsLoggingIn(false);
@@ -61,8 +57,8 @@ export const SettingsView: React.FC = () => {
         
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
           <div>
-            <h2 className="type-h1 lg:type-display mb-4 text-white">Operator Profile</h2>
-            <p className="type-label text-zinc-500">Identity & Configuration</p>
+            <h2 className="type-h1 lg:type-display mb-4 text-white">{t.settings.profile}</h2>
+            <p className="type-label text-zinc-500">{t.settings.identity}</p>
           </div>
           <div className="flex flex-col items-start md:items-end gap-2 opacity-60">
              <span className="type-label text-white">Time Burner</span>
@@ -100,16 +96,16 @@ export const SettingsView: React.FC = () => {
                             <div className="flex items-start gap-4 flex-1">
                                 <AlertCircle className="w-6 h-6 text-red-500 shrink-0 mt-1" />
                                 <div>
-                                    <h4 className="type-label text-red-400 mb-1">Authentication Failed</h4>
+                                    <h4 className="type-label text-red-400 mb-1">{t.settings.auth_failed}</h4>
                                     <p className="type-mono-sm text-red-300 select-all">{authError}</p>
                                 </div>
                             </div>
                             <div className="flex gap-4">
                                 <Button size="sm" variant="danger" onClick={() => setAuthError(null)} icon={<X />}>
-                                    Dismiss
+                                    {t.settings.dismiss}
                                 </Button>
                                 <Button size="sm" variant="primary" onClick={handleGoogleLogin} icon={<RefreshCw />}>
-                                    Retry
+                                    {t.settings.retry}
                                 </Button>
                             </div>
                         </motion.div>
@@ -119,7 +115,7 @@ export const SettingsView: React.FC = () => {
 
             <div className="grid gap-10 relative z-10">
               <div className="space-y-4">
-                <label className="type-label text-zinc-500 pl-2">Codename</label>
+                <label className="type-label text-zinc-500 pl-2">{t.settings.codename}</label>
                 <input 
                   type="text" 
                   value={userConfig.name}
@@ -127,25 +123,42 @@ export const SettingsView: React.FC = () => {
                   className="w-full bg-black border border-white/5 rounded-[2rem] px-8 h-24 type-h3 font-bold focus:border-cyan-500 outline-none transition-all focus:bg-zinc-900 text-white"
                 />
               </div>
+              
+              <div className="space-y-4">
+                <label className="type-label text-zinc-500 pl-2">{t.settings.language}</label>
+                <div className="flex gap-4">
+                    <button 
+                        onClick={() => setLanguage('en')}
+                        className={`flex-1 h-20 rounded-[2rem] border transition-all type-body font-bold ${userConfig.language === 'en' ? 'bg-white text-black border-white' : 'bg-black text-zinc-500 border-white/5 hover:border-white/20'}`}
+                    >
+                        English
+                    </button>
+                    <button 
+                        onClick={() => setLanguage('ru')}
+                        className={`flex-1 h-20 rounded-[2rem] border transition-all type-body font-bold ${userConfig.language === 'ru' ? 'bg-white text-black border-white' : 'bg-black text-zinc-500 border-white/5 hover:border-white/20'}`}
+                    >
+                        Русский
+                    </button>
+                </div>
+              </div>
 
               {/* Cloud Command Center */}
-              {/* UPDATED: items-start for mobile, md:items-center for desktop */}
               <div className="bg-black border border-white/5 rounded-[2rem] p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
                  <div className="flex items-center gap-6 w-full md:w-auto">
                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 ${currentUser ? 'bg-cyan-500/10 text-cyan-400' : 'bg-zinc-900 text-zinc-600'}`}>
                         <Cloud className="w-8 h-8" />
                      </div>
                      <div className="flex flex-col text-left">
-                         <span className="type-body font-bold text-white">Cloud Synchronization</span>
+                         <span className="type-body font-bold text-white">{t.settings.cloud_sync}</span>
                          <span className="type-caption text-zinc-500 mt-1">
-                             {currentUser ? 'Active • Real-time Link' : 'Inactive • Local Only'}
+                             {currentUser ? t.settings.cloud_active : t.settings.cloud_inactive}
                          </span>
                      </div>
                  </div>
 
                  {currentUser ? (
                     <Button variant="secondary" size="md" onClick={handleLogout} className="shrink-0 w-full md:w-auto" icon={<LogOut />}>
-                        Disconnect
+                        {t.settings.disconnect}
                     </Button>
                 ) : (
                     <Button 
@@ -156,7 +169,7 @@ export const SettingsView: React.FC = () => {
                         icon={isLoggingIn ? <RefreshCw className="animate-spin" /> : <Cloud />}
                         disabled={isLoggingIn}
                     >
-                        {isLoggingIn ? 'Connecting...' : 'Sync with Google'}
+                        {isLoggingIn ? t.settings.connecting : t.settings.connect}
                     </Button>
                 )}
               </div>
@@ -168,10 +181,9 @@ export const SettingsView: React.FC = () => {
                 <Info className="w-8 h-8 text-cyan-500" />
              </div>
              <div className="flex-1">
-               <h4 className="type-body font-bold text-zinc-300 uppercase">Operational Log</h4>
+               <h4 className="type-body font-bold text-zinc-300 uppercase">{t.settings.operational_log}</h4>
                <p className="type-mono-sm text-zinc-500 mt-2 leading-relaxed">
-                 Completing FUEL (+15) and BURN (-20) entries synchronizes your energy vector.
-                 Maintain balance to avoid system burnout.
+                 {t.settings.op_log_desc}
                </p>
              </div>
           </Card>
@@ -185,7 +197,7 @@ export const SettingsView: React.FC = () => {
                     <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0">
                         <Keyboard className="w-8 h-8 text-zinc-400" />
                     </div>
-                    <h4 className="type-body font-bold text-zinc-300 uppercase">Keyboard Controls</h4>
+                    <h4 className="type-body font-bold text-zinc-300 uppercase">{t.settings.keyboard}</h4>
                 </div>
                 <ChevronDown className={`w-8 h-8 text-zinc-500 transition-transform ${showShortcuts ? 'rotate-180' : ''}`} />
              </button>
@@ -200,19 +212,19 @@ export const SettingsView: React.FC = () => {
                     >
                         <div className="grid grid-cols-1 gap-6 pt-6 border-t border-white/5">
                             <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                                <span className="type-mono-sm text-zinc-500">Navigate Dates</span>
+                                <span className="type-mono-sm text-zinc-500">{t.settings.nav_dates}</span>
                                 <span className="type-mono-sm text-white">Left / Right Arrow</span>
                             </div>
                             <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                                <span className="type-mono-sm text-zinc-500">Delete Node (Editor)</span>
+                                <span className="type-mono-sm text-zinc-500">{t.settings.del_node}</span>
                                 <span className="type-mono-sm text-white">Delete / Backspace</span>
                             </div>
                             <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                                <span className="type-mono-sm text-zinc-500">Save (Editor)</span>
+                                <span className="type-mono-sm text-zinc-500">{t.settings.save_editor}</span>
                                 <span className="type-mono-sm text-white">Cmd + Enter</span>
                             </div>
                             <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                                <span className="type-mono-sm text-zinc-500">Close / Cancel</span>
+                                <span className="type-mono-sm text-zinc-500">{t.settings.close}</span>
                                 <span className="type-mono-sm text-white">Escape</span>
                             </div>
                         </div>
@@ -226,7 +238,7 @@ export const SettingsView: React.FC = () => {
               <div className="flex items-center gap-6">
                 <Shield className={`w-10 h-10 transition-colors ${currentUser ? 'text-green-500' : 'text-zinc-500 group-hover:text-cyan-400'}`} />
                 <div className="flex flex-col text-left">
-                     <span className="type-body font-bold text-white">Security Protocol</span>
+                     <span className="type-body font-bold text-white">{t.settings.security}</span>
                      {currentUser ? (
                          <span className="type-caption text-zinc-500">Cloud Link Established</span>
                      ) : (
@@ -235,8 +247,21 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
               <span className={`type-label ${currentUser ? 'text-green-500' : 'text-zinc-600'}`}>
-                 {currentUser ? 'SECURE' : 'OFFLINE'}
+                 {currentUser ? t.settings.secure : t.settings.offline}
               </span>
+            </button>
+            
+            <button
+                onClick={restartOnboarding}
+                className="flex items-center justify-between p-10 bg-zinc-900/40 border border-white/5 rounded-[3rem] transition-colors group hover:bg-zinc-900 hover:border-white/20"
+            >
+                <div className="flex items-center gap-6">
+                    <PlayCircle className="w-10 h-10 text-zinc-500 group-hover:text-cyan-400 transition-colors" />
+                    <div className="flex flex-col text-left">
+                         <span className="type-body font-bold text-white">{t.settings.system_intro}</span>
+                         <span className="type-caption text-zinc-500">{t.settings.replay}</span>
+                    </div>
+                </div>
             </button>
             
             <button 
@@ -244,7 +269,7 @@ export const SettingsView: React.FC = () => {
               className="flex items-center justify-center gap-4 p-8 bg-red-500/5 border border-red-500/10 rounded-[3rem] hover:bg-red-500/10 text-red-500 transition-colors group w-full"
             >
               <LogOut className="w-8 h-8 group-hover:scale-110 transition-transform" />
-              <span className="type-body font-bold">Purge Local Data</span>
+              <span className="type-body font-bold">{t.settings.purge}</span>
             </button>
           </section>
         </div>
@@ -253,9 +278,9 @@ export const SettingsView: React.FC = () => {
           isOpen={showResetConfirm}
           onClose={() => setShowResetConfirm(false)}
           onConfirm={handleReset}
-          title="Purge System Data?"
-          message="This will wipe all local storage and reload the application. Cloud data remains safe if synchronized."
-          confirmLabel="Purge"
+          title={t.settings.purge_confirm_title}
+          message={t.settings.purge_confirm_msg}
+          confirmLabel={t.settings.purge}
           isDangerous
         />
       </div>

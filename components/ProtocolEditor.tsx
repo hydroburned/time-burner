@@ -13,6 +13,7 @@ import { timeToMinutes, minutesToTime } from '../utils';
 import { Button } from '../UI';
 import { ActivityEditor } from '../ActivityEditor';
 import { ConfirmationModal } from '../ConfirmationModal';
+import { useTranslation } from '../hooks/useTranslation';
 
 const PIXELS_PER_MINUTE = 3; 
 const SNAP_MINUTES = 15;
@@ -25,6 +26,7 @@ interface ProtocolEditorProps {
 
 export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol, onClose }) => {
   const { addProtocol, updateProtocol, deleteProtocol } = useStore();
+  const t = useTranslation();
   
   const [draftActivities, setDraftActivities] = useState<ActivityDefinition[]>([]);
   const [protocolName, setProtocolName] = useState('');
@@ -226,7 +228,7 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
             value={protocolName}
             onChange={(e) => setProtocolName(e.target.value)}
             className="bg-transparent border-none type-h3 font-bold text-white w-full outline-none placeholder-zinc-700"
-            placeholder="Protocol Name"
+            placeholder={t.editor.name_placeholder}
           />
         </div>
         <div className="flex items-center gap-6">
@@ -236,10 +238,10 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
                 size="icon" 
                 onClick={handleInitialDeleteClick} 
                 icon={<Trash2 />}
-                title="Delete Protocol"
+                title={t.editor.delete}
                />
             )}
-            <Button variant="primary" size="sm" onClick={handleSave} disabled={draftActivities.length === 0} icon={<Check />}>Save</Button>
+            <Button variant="primary" size="sm" onClick={handleSave} disabled={draftActivities.length === 0} icon={<Check />}>{t.editor.save}</Button>
         </div>
       </div>
 
@@ -320,7 +322,7 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
         
         {/* Dock (Left Menu) */}
         <div className="absolute left-6 top-1/2 -translate-y-1/2 z-[160] flex flex-col gap-6">
-            {(['BURN', 'FUEL', 'REST', 'NEUTRAL'] as SlotType[]).map(type => (
+            {(['BURN', 'FUEL', 'REST', 'VOID'] as SlotType[]).map(type => (
                 <motion.div 
                   key={type} 
                   drag 
@@ -352,9 +354,9 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
               >
                 {/* Header: type-label */}
                 <div className="px-3 py-2 type-label text-zinc-500 border-b border-white/5 mb-1">
-                  Insert at {minutesToTime(Math.round(contextMenu.time / SNAP_MINUTES) * SNAP_MINUTES)}
+                  {t.protocol.insert_at} {minutesToTime(Math.round(contextMenu.time / SNAP_MINUTES) * SNAP_MINUTES)}
                 </div>
-                {(['BURN', 'FUEL', 'REST', 'NEUTRAL'] as SlotType[]).map(type => (
+                {(['BURN', 'FUEL', 'REST', 'VOID'] as SlotType[]).map(type => (
                   <button 
                     key={type}
                     onClick={() => addNode(type, contextMenu.time)}
@@ -384,9 +386,9 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={executeDeleteProtocol}
-        title="Delete Protocol?"
-        message={`Are you sure you want to delete "${protocolName}"? This cannot be undone.`}
-        confirmLabel="Delete"
+        title={t.editor.confirm_delete}
+        message={t.editor.confirm_msg}
+        confirmLabel={t.editor.delete}
         isDangerous
       />
     </div>

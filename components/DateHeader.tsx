@@ -3,9 +3,11 @@ import React from 'react';
 import { ChevronLeft, ChevronRight, Target } from 'lucide-react';
 import { useStore } from '../store';
 import { getDayId } from '../utils';
+import { useTranslation } from '../hooks/useTranslation';
 
 export const DateHeader: React.FC = () => {
-  const { selectedDate, setSelectedDate } = useStore();
+  const { selectedDate, setSelectedDate, userConfig } = useStore();
+  const t = useTranslation();
   
   const todayId = getDayId(new Date());
   const isToday = selectedDate === todayId;
@@ -27,9 +29,10 @@ export const DateHeader: React.FC = () => {
     setSelectedDate(todayId);
   };
 
-  // Format Date DD/MM/YYYY
+  // Format Date using locale
   const dateObj = new Date(selectedDate);
-  const formattedDate = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`;
+  const lang = userConfig.language === 'ru' ? 'ru-RU' : 'en-US';
+  const formattedDate = dateObj.toLocaleDateString(lang, { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   return (
     // STRICT: p-4 (8px visual padding due to 8px rem root), rounded-[2rem]
@@ -45,7 +48,7 @@ export const DateHeader: React.FC = () => {
          <span className="type-mono-sm text-white tabular-nums">{formattedDate}</span>
          {/* Subtitle: type-caption (10px) */}
          <span className={`type-caption mt-1 ${isToday ? 'text-cyan-400' : isFuture ? 'text-purple-400' : 'text-zinc-500'}`}>
-            {isToday ? 'LIVE SYNC' : isFuture ? 'FUTURE STATE' : 'ARCHIVE'}
+            {isToday ? t.views.live_sync : isFuture ? t.views.future_state : t.views.archive}
          </span>
        </div>
 

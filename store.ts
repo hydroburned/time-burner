@@ -1,14 +1,14 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { AppState, ViewType, ActivityDefinition, Protocol, UserConfig, ActivityLog, DayState, ChecklistItem, UserInfo } from './types';
-import { DEFAULT_PROTOCOL } from './constants';
+import { AppState, ViewType, ActivityDefinition, Protocol, UserConfig, ActivityLog, DayState, ChecklistItem, UserInfo, Language } from './types';
+import { DEFAULT_PROTOCOL, DEFAULT_PROTOCOL_RU } from './constants';
 import { getDayId } from './utils';
 
 const DEFAULT_PROTOCOL_ID = 'default-biohacker-v1';
 
 interface ExtendedAppState extends AppState {
-    // Removed conflict flags
+    setLanguage: (lang: Language) => void;
 }
 
 export const useStore = create<ExtendedAppState>()(
@@ -42,7 +42,8 @@ export const useStore = create<ExtendedAppState>()(
         name: 'Operator',
         bio: 'Peak Performance Enthusiast',
         dailyGoal: 80,
-        onboardingComplete: false
+        onboardingComplete: false,
+        language: 'en' // Default language
       },
 
       setView: (view: ViewType) => set({ view }),
@@ -56,6 +57,30 @@ export const useStore = create<ExtendedAppState>()(
               ...newState
           }));
           get().updateEnergy();
+      },
+      
+      setLanguage: (lang: Language) => {
+        set(state => {
+            // Check if we are in onboarding (or just started). 
+            // If the default protocol hasn't been modified (simplified check by ID and name), swap it.
+            // This is a bit aggressive but necessary for the "First Step" experience.
+            let newProtocols = [...state.protocols];
+            const defaultProtoIndex = newProtocols.findIndex(p => p.id === DEFAULT_PROTOCOL_ID);
+            
+            if (defaultProtoIndex !== -1 && !state.userConfig.onboardingComplete) {
+                // Swap content based on language
+                newProtocols[defaultProtoIndex] = {
+                    ...newProtocols[defaultProtoIndex],
+                    name: lang === 'ru' ? 'Стандартный Протокол' : 'Standard Protocol',
+                    activities: lang === 'ru' ? DEFAULT_PROTOCOL_RU : DEFAULT_PROTOCOL
+                };
+            }
+
+            return {
+                userConfig: { ...state.userConfig, language: lang },
+                protocols: newProtocols
+            };
+        });
       },
 
       setSelectedDate: (date: string) => {
@@ -186,7 +211,8 @@ export const useStore = create<ExtendedAppState>()(
         const newProtocol: Protocol = {
           id: crypto.randomUUID(),
           name,
-          activities
+          activities,
+          isCustom: false
         };
         
         set(state => {
@@ -275,7 +301,7 @@ export const useStore = create<ExtendedAppState>()(
         get().updateEnergy();
       },
 
-      // --- ASSIGNMENT ---
+      // --- ASSIGNMENT & FORKING ---
 
       applyProtocolToDay: (date: string, protocolId: string) => {
         set(state => {
@@ -301,6 +327,38 @@ export const useStore = create<ExtendedAppState>()(
         });
         get().updateEnergy();
       },
+      
+      detachProtocolForDay: (date: string) => {
+        set(state => {
+            const day = state.days[date];
+            if (!day || !day.protocolId) return state;
+            
+            const parentProtocol = state.protocols.find(p => p.id === day.protocolId);
+            if (!parentProtocol) return state;
+
+            // Generate new Custom Protocol
+            const newId = `custom-${date}-${crypto.randomUUID().slice(0,4)}`;
+            const newProtocol: Protocol = {
+                id: newId,
+                name: `Custom (${new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})`,
+                activities: parentProtocol.activities.map(a => ({ ...a })), // Deep copy activities? No, shallow copy of array is enough if objects are treated immutable, but safer to copy objects
+                isCustom: true
+            };
+
+            return {
+                protocols: [...state.protocols, newProtocol],
+                days: {
+                    ...state.days,
+                    [date]: {
+                        ...day,
+                        protocolId: newId
+                        // Keep completion status? Yes, structure is same
+                    }
+                }
+            };
+        });
+        get().updateEnergy();
+      },
 
       updateUserConfig: (config: Partial<UserConfig>) => {
         set(state => ({ userConfig: { ...state.userConfig, ...config } }));
@@ -308,13 +366,17 @@ export const useStore = create<ExtendedAppState>()(
 
       completeOnboarding: () => {
         set(state => ({ userConfig: { ...state.userConfig, onboardingComplete: true } }));
+      },
+      
+      restartOnboarding: () => {
+        set(state => ({ userConfig: { ...state.userConfig, onboardingComplete: false } }));
       }
     }),
     {
       name: 'time-burner-storage-v14', 
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ 
-          // Persist everything except transient UI states if any were added
+          // Persist everything
           ...state
       })
     }

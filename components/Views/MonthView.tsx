@@ -7,11 +7,13 @@ import { BookTemplate, RefreshCw, Plus, ChevronLeft, ChevronRight } from 'lucide
 import { ProtocolContextMenu } from '../ProtocolContextMenu';
 import { MiniTimeline } from '../MiniTimeline';
 import { Button } from '../UI';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const MonthView: React.FC = () => {
-  const { setSelectedDate, setView, days, protocols } = useStore();
+  const { setSelectedDate, setView, days, protocols, userConfig } = useStore();
   const [menuState, setMenuState] = useState<{ dateId: string; x: number; y: number } | null>(null);
   const [viewDate, setViewDate] = useState(new Date());
+  const t = useTranslation();
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -63,6 +65,9 @@ export const MonthView: React.FC = () => {
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
   const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
   const jumpToToday = () => setViewDate(new Date());
+  
+  const lang = userConfig.language === 'ru' ? 'ru-RU' : 'en-US';
+  const weekDays = [t.common.mon, t.common.tue, t.common.wed, t.common.thu, t.common.fri, t.common.sat, t.common.sun];
 
   return (
     // RESTORED PADDING: py-20, UPDATED desktop px to lg:px-20
@@ -70,22 +75,22 @@ export const MonthView: React.FC = () => {
       {/* Header with Navigation */}
       <div className="mb-16 flex flex-col md:flex-row md:items-end justify-between gap-8">
         <div className="text-left">
-            <h2 className="type-h1 lg:type-display text-white mb-4">
-            {viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            <h2 className="type-h1 lg:type-display text-white mb-4 capitalize">
+            {viewDate.toLocaleDateString(lang, { month: 'long', year: 'numeric' })}
             </h2>
-            <p className="type-label text-zinc-500">Temporal Grid Overview</p>
+            <p className="type-label text-zinc-500">{t.views.temporal_grid}</p>
         </div>
         
         <div className="flex gap-4">
              <Button variant="secondary" size="icon" onClick={prevMonth} icon={<ChevronLeft />} />
-             <Button variant="secondary" size="md" onClick={jumpToToday}>Today</Button>
+             <Button variant="secondary" size="md" onClick={jumpToToday}>{t.common.today}</Button>
              <Button variant="secondary" size="icon" onClick={nextMonth} icon={<ChevronRight />} />
         </div>
       </div>
 
       {/* Grid: 3 cols on mobile, 7 on desktop */}
       <div className="grid grid-cols-3 md:grid-cols-7 gap-px bg-white/5 rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl mb-32">
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+        {weekDays.map(d => (
           <div key={d} className="bg-zinc-900 p-6 type-label text-zinc-500 text-center border-b border-white/5 hidden md:block">
             {d}
           </div>

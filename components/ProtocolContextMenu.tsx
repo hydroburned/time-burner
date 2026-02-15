@@ -2,7 +2,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store';
-import { ChevronRight, LayoutGrid } from 'lucide-react';
+import { ChevronRight, LayoutGrid, GitFork } from 'lucide-react';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface ProtocolContextMenuProps {
   isOpen: boolean;
@@ -12,14 +13,24 @@ interface ProtocolContextMenuProps {
 }
 
 export const ProtocolContextMenu: React.FC<ProtocolContextMenuProps> = ({ isOpen, onClose, targetDate, coords }) => {
-  const { protocols, days, applyProtocolToDay, setView } = useStore();
+  const { protocols, days, applyProtocolToDay, setView, detachProtocolForDay } = useStore();
+  const t = useTranslation();
+  
   const currentProtocolId = days[targetDate]?.protocolId;
+  const currentProtocol = protocols.find(p => p.id === currentProtocolId);
+  // Only show library protocols or if currently no protocol
+  const visibleProtocols = protocols.filter(p => !p.isCustom);
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
 
   const handleSelect = (protocolId: string) => {
     applyProtocolToDay(targetDate, protocolId);
     onClose();
+  };
+  
+  const handleDetach = () => {
+      detachProtocolForDay(targetDate);
+      onClose();
   };
 
   const handleLibrary = () => {
@@ -81,17 +92,16 @@ export const ProtocolContextMenu: React.FC<ProtocolContextMenuProps> = ({ isOpen
             {isMobile && <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto my-2 mb-4" />}
 
             <div className="px-4 py-2 type-label text-zinc-500 border-b border-white/5 mb-2">
-              Switch Protocol
+              {t.protocol.switch}
             </div>
             
             <div className="max-h-[300px] overflow-y-auto custom-scrollbar flex flex-col gap-1">
-              {protocols.map(p => {
+              {visibleProtocols.map(p => {
                 const isActive = currentProtocolId === p.id;
                 return (
                   <button
                     key={p.id}
                     onClick={() => handleSelect(p.id)}
-                    // UPDATED: type-body for smaller list items
                     className={`w-full text-left px-4 py-3 rounded-xl type-body font-bold transition-all flex items-center justify-between group ${
                       isActive ? 'bg-cyan-500/10 text-cyan-400' : 'text-zinc-300 hover:bg-white/10 hover:text-white'
                     }`}
@@ -103,16 +113,36 @@ export const ProtocolContextMenu: React.FC<ProtocolContextMenuProps> = ({ isOpen
               })}
             </div>
 
+            {/* Separator */}
             <div className="h-px bg-white/5 my-2" />
+            
+            {/* Custom / Unlink Option */}
+            {currentProtocol && !currentProtocol.isCustom && (
+                <button 
+                  onClick={handleDetach}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-orange-500/5 hover:bg-orange-500/10 type-body font-bold text-orange-400 border border-orange-500/10 hover:border-orange-500/30 transition-all mb-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <GitFork className="w-6 h-6 rotate-180" />
+                    <span>{t.protocol.unlink}</span>
+                  </div>
+                </button>
+            )}
+
+            {currentProtocol && currentProtocol.isCustom && (
+                <div className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-white/5 type-body text-zinc-500 flex items-center gap-3 mb-2 cursor-default">
+                    <GitFork className="w-6 h-6 rotate-180 text-cyan-500" />
+                    <span>{t.protocol.custom_active}</span>
+                </div>
+            )}
             
             <button 
               onClick={handleLibrary}
-              // UPDATED: type-body size, but icons kept w-6 h-6
               className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-white/5 type-body font-bold text-zinc-400 hover:text-white transition-colors"
             >
               <div className="flex items-center gap-3">
                 <LayoutGrid className="w-6 h-6" />
-                <span>Library</span>
+                <span>{t.protocol.library}</span>
               </div>
               <ChevronRight className="w-6 h-6" />
             </button>

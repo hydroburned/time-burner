@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Activity } from '../types';
 import { COLORS } from '../constants';
 import { describeArc, timeToMinutes, getDayId } from '../utils';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface TimeCircleProps {
   activities: Activity[];
@@ -23,6 +24,7 @@ export const TimeCircle: React.FC<TimeCircleProps> = ({
   selectedDate
 }) => {
   const [now, setNow] = useState(new Date());
+  const t = useTranslation();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
@@ -75,9 +77,7 @@ export const TimeCircle: React.FC<TimeCircleProps> = ({
   return (
     <div className="flex flex-col items-center justify-center">
       <div className="relative" style={{ width: size, height: size }}>
-        {/* Removed -rotate-180 to make 00:00 Top and 12:00 Bottom */}
         <svg width={size} height={size} className="overflow-visible">
-          {/* Background Track */}
           <circle
             cx={centerX}
             cy={centerY}
@@ -87,7 +87,6 @@ export const TimeCircle: React.FC<TimeCircleProps> = ({
             strokeWidth="20"
           />
           
-          {/* Hour Markers (Ticks Only) */}
           {[...Array(24)].map((_, i) => (
             <line
               key={i}
@@ -100,12 +99,11 @@ export const TimeCircle: React.FC<TimeCircleProps> = ({
             />
           ))}
 
-          {/* Activity Slots */}
           {slots.map((slot) => {
              let strokeColor = COLORS[slot.type];
              let opacity = 0.3;
              let filter = 'none';
-             let strokeWidth = 18; // Slightly thinner default for elegance
+             let strokeWidth = 18;
 
              if (slot.isActive || slot.isHovered) {
                opacity = 1;
@@ -146,7 +144,6 @@ export const TimeCircle: React.FC<TimeCircleProps> = ({
             );
           })}
 
-          {/* Current Time Indicator - Only show if it is today */}
           {isToday && (
             <>
               <motion.line
@@ -170,38 +167,32 @@ export const TimeCircle: React.FC<TimeCircleProps> = ({
           )}
         </svg>
 
-        {/* Center Time Info */}
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none z-20">
-          {/* type-mono-display (48px) */}
           <span className="type-mono-display text-white tabular-nums">
             {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
           </span>
-          {/* type-label (12px) */}
           <span className="type-label text-zinc-500 mt-2">
-             Right Now
+             {t.time_circle.right_now}
           </span>
         </div>
       </div>
 
-      {/* Info Below Dial */}
-      {/* Updated Padding: p-8 pb-20 for mobile (40px bottom) */}
       <div className="h-16 w-full flex items-start justify-center mt-12 p-8 lg:pb-8 pb-20">
         {activeActivity ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              // INCREASED GAP TO gap-4 (16px)
               className="flex flex-col items-center gap-4"
             >
               <div className="px-4 py-1.5 bg-zinc-800 rounded-full border border-white/10">
-                <span className="type-label text-zinc-400">Current Phase</span>
+                <span className="type-label text-zinc-400">{t.time_circle.current_phase}</span>
               </div>
               <span className={`type-h3 text-center px-4`} style={{ color: COLORS[activeActivity.type] }}>
                 {activeActivity.title}
               </span>
             </motion.div>
           ) : (
-            <span className="type-label text-zinc-600 mt-2">System Idle</span>
+            <span className="type-label text-zinc-600 mt-2">{t.time_circle.system_idle}</span>
           )}
       </div>
     </div>

@@ -1,5 +1,6 @@
 
 export type SlotType = 'BURN' | 'FUEL' | 'REST' | 'VOID';
+export type Language = 'en' | 'ru';
 
 // The static definition of a slot (stored in Protocol)
 export interface ActivityDefinition {
@@ -43,6 +44,7 @@ export interface Protocol {
   id: string;
   name: string;
   activities: ActivityDefinition[];
+  isCustom?: boolean; // If true, this is a detached instance for a specific day
 }
 
 export interface UserConfig {
@@ -50,6 +52,7 @@ export interface UserConfig {
   bio: string;
   dailyGoal: number;
   onboardingComplete: boolean;
+  language: Language;
 }
 
 export interface UserInfo {
@@ -101,10 +104,12 @@ export interface AppState {
   updateActivityInProtocol: (protocolId: string, activity: ActivityDefinition) => void;
   removeActivityFromProtocol: (protocolId: string, activityId: string) => void;
   
-  // Assignment
+  // Assignment & Forking
   applyProtocolToDay: (date: string, protocolId: string) => void;
+  detachProtocolForDay: (date: string) => void; // New: Creates a custom instance
   
   // User
   updateUserConfig: (config: Partial<UserConfig>) => void;
   completeOnboarding: () => void;
+  restartOnboarding: () => void; // New: Re-runs intro
 }

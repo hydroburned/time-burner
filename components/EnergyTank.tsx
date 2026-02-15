@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Flame, Droplets, ShieldAlert } from 'lucide-react';
 import { COLORS } from '../constants';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface EnergyTankProps {
   currentEnergy: number;
@@ -11,6 +12,7 @@ interface EnergyTankProps {
 export const EnergyTank: React.FC<EnergyTankProps> = ({ currentEnergy }) => {
   const [mode, setMode] = useState<'IDLE' | 'FUELING' | 'BURNING'>('IDLE');
   const prevEnergyRef = useRef(currentEnergy);
+  const t = useTranslation();
   
   const percentage = Math.min(100, Math.max(0, currentEnergy));
   const isLow = percentage < 20;
@@ -36,7 +38,6 @@ export const EnergyTank: React.FC<EnergyTankProps> = ({ currentEnergy }) => {
   };
 
   return (
-    // STRICT: p-8 (32px) padding, rounded-3xl (24px)
     <div className="relative flex flex-col p-8 bg-zinc-900/40 rounded-3xl border border-white/5 backdrop-blur-xl shadow-lg w-full group overflow-hidden">
       {isLow && <div className="absolute inset-0 bg-red-600/5 animate-pulse pointer-events-none" />}
       
@@ -55,18 +56,15 @@ export const EnergyTank: React.FC<EnergyTankProps> = ({ currentEnergy }) => {
                <Zap className="w-5 h-5 text-zinc-500" />}
             </motion.div>
           </AnimatePresence>
-          {/* Label: type-label (12px) */}
           <span className="type-label text-zinc-500">
-            Energy Tank
+            {t.energy.tank_label}
           </span>
         </div>
-        {/* Percentage: type-mono-body (16px) */}
         <span className={`type-mono-body ${isLow ? 'text-red-500' : 'text-white'}`}>
           {Math.round(currentEnergy)}%
         </span>
       </div>
 
-      {/* Bar */}
       <div className="relative h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
         <motion.div
           className="absolute left-0 h-full rounded-full"

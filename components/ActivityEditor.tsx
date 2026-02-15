@@ -6,6 +6,7 @@ import { ActivityDefinition, SlotType } from '../types';
 import { getEndTime, timeToMinutes } from '../utils';
 import { Button, Input } from './UI';
 import { TAG_CONFIG } from '../constants';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface ActivityEditorProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
   protocolName,
   mode = 'modal'
 }) => {
+  const t = useTranslation();
   const [data, setData] = useState<Partial<ActivityDefinition>>({
     title: '',
     startTime: '09:00',
@@ -173,7 +175,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
                  <div className="flex items-center gap-4">
                      <Input 
                        autoFocus={isMobile || !isMobile} // Always autofocus title
-                       placeholder="Activity Title"
+                       placeholder={t.editor.title_placeholder}
                        value={data.title}
                        onChange={(e) => setData({ ...data, title: e.target.value })}
                        // Changed px-2 to px-8 (16px visual)
@@ -189,7 +191,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
                  {/* Updated padding to p-6 for better spacing */}
                  <div className="grid grid-cols-[1.5fr_1.5fr_1fr] gap-4 bg-zinc-900/50 p-6 rounded-[2.5rem] border border-white/5">
                     <div className="flex flex-col gap-2">
-                      <label className="type-label text-zinc-500 pl-2">Start</label>
+                      <label className="type-label text-zinc-500 pl-2">{t.editor.start}</label>
                       <input 
                         type="time"
                         value={data.startTime}
@@ -198,7 +200,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
                       />
                     </div>
                     <div className="flex flex-col gap-2 border-l border-white/5 pl-4 md:pl-6">
-                      <label className="type-label text-zinc-500 pl-2">End</label>
+                      <label className="type-label text-zinc-500 pl-2">{t.editor.end}</label>
                       <input 
                         type="time"
                         value={getEndTime(data.startTime || '00:00', data.duration || 60)}
@@ -213,7 +215,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
                       />
                     </div>
                     <div className="flex flex-col gap-2 border-l border-white/5 pl-4 md:pl-6">
-                      <label className="type-label text-zinc-500 pl-2">Mins</label>
+                      <label className="type-label text-zinc-500 pl-2">{t.editor.mins}</label>
                       <input 
                         type="number"
                         value={data.duration}
@@ -238,7 +240,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
                         }`}
                      >
                         {/* NO ICON */}
-                        <span className="type-label">Core</span>
+                        <span className="type-label">{t.editor.core}</span>
                      </button>
 
                      {/* Other Tags */}
@@ -296,7 +298,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
                              // Explicitly override icon size
                              icon={<Trash2 className="w-12 h-12" />}
                            >
-                              <span className="hidden sm:inline">Delete</span>
+                              <span className="hidden sm:inline">{t.editor.delete}</span>
                            </Button>
                         )}
                         <Button 
@@ -306,7 +308,7 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
                           // Height h-24 (48px) to match type toggles
                           className="px-12 rounded-full h-24 type-h3 flex-1 md:flex-none"
                         >
-                           Done
+                           {t.editor.done}
                         </Button>
                      </div>
                  </div>

@@ -67,3 +67,27 @@ export const DEFAULT_PROTOCOL: ActivityDefinition[] = [
   { id: '13', title: 'Reading', startTime: '22:00', duration: 60, type: 'REST', description: 'Physical book reading.' },
   { id: '14', title: 'Sleep', startTime: '23:00', duration: 480, type: 'REST', description: 'Optimized recovery.', tags: ['Health'] },
 ];
+
+export const DEFAULT_PROTOCOL_RU: ActivityDefinition[] = [
+  // MORNING
+  { id: '1', title: 'Подъем + Вода', startTime: '07:00', duration: 30, type: 'FUEL', description: 'Вода и легкая медитация.', tags: ['Health'] },
+  { id: '2', title: 'Эффективный Завтрак', startTime: '07:30', duration: 60, type: 'FUEL', description: 'Питательное топливо для мозга.', tags: ['Health'] },
+  { id: '3', title: 'Глубокая работа #1', startTime: '09:00', duration: 150, type: 'BURN', description: 'Приоритетные задачи и фокус.', priority: true },
+  { id: '4', title: 'Дневной свет', startTime: '11:30', duration: 30, type: 'FUEL', description: 'Воздействие солнечного света.', tags: ['Nature'] },
+  
+  // DAY
+  { id: '5', title: 'Физическая нагрузка', startTime: '12:00', duration: 90, type: 'FUEL', description: 'Спорт или активное движение.', tags: ['Workout'] },
+  { id: '6', title: 'Обед + Восстановление', startTime: '13:30', duration: 60, type: 'REST', description: 'Питание и отдых.', tags: ['Health'] },
+  { id: '7', title: 'NSDR Практика', startTime: '14:30', duration: 20, type: 'FUEL', description: 'Глубокий отдых без сна.', tags: ['Health'] },
+  
+  // AFTERNOON
+  { id: '8', title: 'Глубокая работа #2', startTime: '15:00', duration: 120, type: 'BURN', description: 'Второй блок фокуса.' },
+  { id: '9', title: 'Обучение', startTime: '17:00', duration: 60, type: 'VOID', description: 'Изучение новых навыков.' },
+  { id: '10', title: 'Прогулка', startTime: '18:00', duration: 60, type: 'FUEL', description: 'Оптический поток и расслабление глаз.', tags: ['Nature'] },
+  
+  // EVENING
+  { id: '11', title: 'Ужин с семьей', startTime: '19:00', duration: 90, type: 'REST', description: 'Социальная перезагрузка.', tags: ['Love'] },
+  { id: '12', title: 'Цифровой закат', startTime: '21:30', duration: 30, type: 'REST', description: 'Блокировка синего света.' },
+  { id: '13', title: 'Чтение', startTime: '22:00', duration: 60, type: 'REST', description: 'Бумажная книга.' },
+  { id: '14', title: 'Сон', startTime: '23:00', duration: 480, type: 'REST', description: 'Оптимизированное восстановление.', tags: ['Health'] },
+];

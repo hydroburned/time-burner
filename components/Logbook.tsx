@@ -1,10 +1,16 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Plus, StickyNote, ListTodo, AlertCircle } from 'lucide-react';
+import { Check, Plus, StickyNote, ListTodo, Mic, MicOff, AlertCircle } from 'lucide-react';
 import { useStore } from '../store';
 import { Activity, ChecklistItem } from '../types';
 import { COLORS } from '../constants';
+import { useTranslation } from '../hooks/useTranslation';
+
+interface IWindow extends Window {
+  webkitSpeechRecognition: any;
+  SpeechRecognition: any;
+}
 
 interface LogbookProps {
   selectedDate: string;
@@ -13,30 +19,102 @@ interface LogbookProps {
 
 export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity }) => {
   const { days, updateActivityLog, updateDailyNote, updateDailyChecklist } = useStore();
+  const t = useTranslation();
   
   const dayState = days[selectedDate];
   const [dailyNoteLocal, setDailyNoteLocal] = useState('');
-  
-  // Activity Specific State
   const [notesLocal, setNotesLocal] = useState('');
   const [newChecklistText, setNewChecklistText] = useState('');
-  
-  // Daily Checklist State
   const [newDailyChecklistText, setNewDailyChecklistText] = useState('');
 
-  // Sync state from store when selection changes
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceError, setVoiceError] = useState(false); 
+  const recordingTargetRef = useRef<'DAILY' | 'ACTIVITY' | null>(null);
+  const recognitionRef = useRef<any>(null);
+
   useEffect(() => {
-    if (dayState) {
-        setDailyNoteLocal(dayState.dailyNote || '');
+    const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
+    const SpeechApi = SpeechRecognition || webkitSpeechRecognition;
+
+    if (SpeechApi) {
+        const recognition = new SpeechApi();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        // FUTURE TODO: Set lang based on store.userConfig.language ('ru-RU' or 'en-US')
+        recognition.lang = 'en-US'; 
+
+        recognition.onstart = () => {
+            setIsRecording(true);
+            setVoiceError(false);
+        };
+        recognition.onend = () => {
+            setIsRecording(false);
+            recordingTargetRef.current = null;
+        };
+        recognition.onerror = (event: any) => {
+            console.error("Speech recognition error:", event.error);
+            setIsRecording(false);
+            recordingTargetRef.current = null;
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                setVoiceError(true);
+            }
+        };
+        recognition.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            if (transcript) {
+                if (recordingTargetRef.current === 'DAILY') {
+                    setDailyNoteLocal(prev => {
+                        const cleanPrev = prev.trim();
+                        return cleanPrev ? `${cleanPrev} ${transcript}` : transcript;
+                    });
+                } else if (recordingTargetRef.current === 'ACTIVITY') {
+                    setNotesLocal(prev => {
+                        const cleanPrev = prev.trim();
+                        return cleanPrev ? `${cleanPrev} ${transcript}` : transcript;
+                    });
+                }
+            }
+        };
+        recognitionRef.current = recognition;
+    } else {
+        setVoiceError(true); 
     }
-    
+  }, []);
+
+  const startRecording = (target: 'DAILY' | 'ACTIVITY') => {
+      if (!recognitionRef.current) return;
+      if (voiceError) {
+          alert(t.logbook.voice_denied);
+          return;
+      }
+      try {
+        if (isRecording) recognitionRef.current.stop();
+        recordingTargetRef.current = target;
+        recognitionRef.current.start();
+      } catch (e) {
+        console.error("Failed to start recognition:", e);
+        setIsRecording(false);
+      }
+  };
+
+  const stopRecording = () => {
+      if (recognitionRef.current) recognitionRef.current.stop();
+  };
+
+  const toggleRecording = (target: 'DAILY' | 'ACTIVITY') => {
+      if (isRecording) stopRecording();
+      else startRecording(target);
+  };
+
+  useEffect(() => {
+    if (dayState) setDailyNoteLocal(dayState.dailyNote || '');
     if (dayState && selectedActivity) {
         const log = dayState.activityLogs[selectedActivity.id];
         setNotesLocal(log?.notes || '');
     }
+    if (isRecording) stopRecording();
   }, [dayState, selectedActivity?.id]);
 
-  // Debounce Daily Note Save
   useEffect(() => {
     const timer = setTimeout(() => {
       if (dayState && dailyNoteLocal !== dayState.dailyNote) {
@@ -46,7 +124,6 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
     return () => clearTimeout(timer);
   }, [dailyNoteLocal, selectedDate]);
 
-  // Debounce Activity Note Save
   useEffect(() => {
     if (!selectedActivity) return;
     const timer = setTimeout(() => {
@@ -58,23 +135,12 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
     return () => clearTimeout(timer);
   }, [notesLocal, selectedDate, selectedActivity?.id]);
 
-
-  // --- Activity Actions ---
-
   const handleChecklistAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedActivity || !newChecklistText.trim()) return;
-
     const currentLog = dayState?.activityLogs[selectedActivity.id] || { notes: '', checklist: [] };
-    const newItem: ChecklistItem = {
-        id: crypto.randomUUID(),
-        text: newChecklistText.trim(),
-        completed: false
-    };
-
-    updateActivityLog(selectedDate, selectedActivity.id, {
-        checklist: [...(currentLog.checklist || []), newItem]
-    });
+    const newItem: ChecklistItem = { id: crypto.randomUUID(), text: newChecklistText.trim(), completed: false };
+    updateActivityLog(selectedDate, selectedActivity.id, { checklist: [...(currentLog.checklist || []), newItem] });
     setNewChecklistText('');
   };
 
@@ -82,10 +148,7 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
     if (!selectedActivity) return;
     const currentLog = dayState?.activityLogs[selectedActivity.id];
     if (!currentLog) return;
-
-    const updatedChecklist = currentLog.checklist.map(item => 
-        item.id === itemId ? { ...item, completed: !item.completed } : item
-    );
+    const updatedChecklist = currentLog.checklist.map(item => item.id === itemId ? { ...item, completed: !item.completed } : item);
     updateActivityLog(selectedDate, selectedActivity.id, { checklist: updatedChecklist });
   };
   
@@ -93,33 +156,22 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
     if (!selectedActivity) return;
     const currentLog = dayState?.activityLogs[selectedActivity.id];
     if (!currentLog) return;
-
     const updatedChecklist = currentLog.checklist.filter(item => item.id !== itemId);
     updateActivityLog(selectedDate, selectedActivity.id, { checklist: updatedChecklist });
   };
 
-  // --- Daily Actions ---
-
   const handleDailyChecklistAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDailyChecklistText.trim()) return;
-
     const currentList = dayState?.dailyChecklist || [];
-    const newItem: ChecklistItem = {
-        id: crypto.randomUUID(),
-        text: newDailyChecklistText.trim(),
-        completed: false
-    };
-
+    const newItem: ChecklistItem = { id: crypto.randomUUID(), text: newDailyChecklistText.trim(), completed: false };
     updateDailyChecklist(selectedDate, [...currentList, newItem]);
     setNewDailyChecklistText('');
   };
 
   const toggleDailyChecklist = (itemId: string) => {
     const currentList = dayState?.dailyChecklist || [];
-    const updatedList = currentList.map(item => 
-        item.id === itemId ? { ...item, completed: !item.completed } : item
-    );
+    const updatedList = currentList.map(item => item.id === itemId ? { ...item, completed: !item.completed } : item);
     updateDailyChecklist(selectedDate, updatedList);
   };
 
@@ -129,17 +181,32 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
     updateDailyChecklist(selectedDate, updatedList);
   };
 
-
-  // --- Views ---
+  const MicButton = ({ target }: { target: 'DAILY' | 'ACTIVITY' }) => {
+      const isActive = isRecording && recordingTargetRef.current === target;
+      return (
+        <button
+            onClick={() => toggleRecording(target)}
+            disabled={voiceError}
+            className={`absolute bottom-6 right-6 w-16 h-16 rounded-full border transition-all duration-300 z-20 flex items-center justify-center
+                ${voiceError 
+                    ? 'bg-zinc-900 border-red-900/50 text-red-700 cursor-not-allowed' 
+                    : isActive 
+                        ? 'bg-red-500 border-red-400 text-white animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.6)] scale-110' 
+                        : 'bg-zinc-800 border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-700 shadow-lg'
+                }`}
+            title={voiceError ? t.logbook.voice_denied : isActive ? t.logbook.voice_stop : t.logbook.voice_start}
+        >
+            {isActive ? <Mic className="w-8 h-8" /> : voiceError ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
+        </button>
+      );
+  };
 
   const renderDailySummary = () => (
     <div className="flex flex-col h-full gap-8">
         <div className="flex items-center gap-4 text-zinc-500">
             <StickyNote className="w-6 h-6" />
-            <span className="type-label">Daily Summary</span>
+            <span className="type-label">{t.logbook.daily_summary}</span>
         </div>
-
-        {/* Daily Checklist */}
         <div className="flex flex-col gap-4">
              <div className="flex flex-col gap-2">
                 {dayState?.dailyChecklist?.map(item => (
@@ -162,7 +229,7 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
                       <input 
                         value={newDailyChecklistText}
                         onChange={(e) => setNewDailyChecklistText(e.target.value)}
-                        placeholder="Add daily task..."
+                        placeholder={t.logbook.add_task}
                         className="bg-transparent border-none outline-none type-body text-white placeholder-zinc-700 flex-1 h-10"
                       />
                 </form>
@@ -171,17 +238,20 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
         
         <div className="h-px bg-white/5 w-full my-2" />
 
-        <textarea 
-            value={dailyNoteLocal}
-            onChange={(e) => setDailyNoteLocal(e.target.value)}
-            placeholder="Log general insights, mood, or retrospective notes for the day..."
-            className="w-full flex-1 bg-zinc-950/30 border border-white/5 rounded-[2rem] p-8 type-body focus:border-white/10 outline-none resize-none placeholder-zinc-700 text-zinc-300 leading-relaxed"
-        />
+        <div className="relative flex-1 bg-zinc-950/30 border border-white/5 rounded-[2rem] overflow-hidden group focus-within:border-white/10 transition-colors">
+            <textarea 
+                value={dailyNoteLocal}
+                onChange={(e) => setDailyNoteLocal(e.target.value)}
+                placeholder={t.logbook.daily_placeholder}
+                className="w-full h-full p-8 pb-24 bg-transparent border-none outline-none resize-none placeholder-zinc-700 text-zinc-300 leading-relaxed custom-scrollbar"
+            />
+            <MicButton target="DAILY" />
+        </div>
         
         {(!dayState || !dayState.protocolId) && (
             <div className="p-6 rounded-[2rem] bg-orange-500/10 border border-orange-500/20 flex items-center gap-4">
                 <AlertCircle className="w-8 h-8 text-orange-500" />
-                <span className="type-mono-sm text-orange-400">No protocol assigned. Select one to enable tracking.</span>
+                <span className="type-mono-sm text-orange-400">{t.logbook.no_protocol}</span>
             </div>
         )}
     </div>
@@ -193,22 +263,19 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
 
     return (
         <div className="flex flex-col h-full gap-8">
-            {/* Header */}
             <div className="pb-8 border-b border-white/5">
                 <div className="flex items-center gap-3 mb-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[selectedActivity.type] }} />
                     <span className="type-label" style={{ color: COLORS[selectedActivity.type] }}>{selectedActivity.type}</span>
                 </div>
-                {/* Mobile optimization: truncate title if too long */}
                 <h3 className="type-h2 text-white leading-tight break-words">{selectedActivity.title}</h3>
                 <span className="type-mono-sm text-zinc-500 mt-2 block">{selectedActivity.startTime} // {selectedActivity.duration}m</span>
             </div>
 
-            {/* Checklist */}
             <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3 text-zinc-500">
                     <ListTodo className="w-5 h-5" />
-                    <span className="type-label">Micro-Habits</span>
+                    <span className="type-label">{t.logbook.micro_habits}</span>
                 </div>
                 
                 <div className="flex flex-col gap-2">
@@ -222,7 +289,7 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
                                 onClick={(e) => { e.stopPropagation(); deleteChecklist(item.id); }}
                                 className="opacity-0 group-hover:opacity-100 p-2 text-zinc-600 hover:text-red-500 transition-all"
                             >
-                                <Plus className="w-5 h-5 rotate-45" /> {/* Close Icon */}
+                                <Plus className="w-5 h-5 rotate-45" />
                             </button>
                         </div>
                     ))}
@@ -232,32 +299,36 @@ export const Logbook: React.FC<LogbookProps> = ({ selectedDate, selectedActivity
                          <input 
                             value={newChecklistText}
                             onChange={(e) => setNewChecklistText(e.target.value)}
-                            placeholder="Add execution step..."
+                            placeholder={t.logbook.add_step}
                             className="bg-transparent border-none outline-none type-body text-white placeholder-zinc-700 flex-1 h-10"
                          />
                     </form>
                 </div>
             </div>
 
-            {/* Notes */}
             <div className="flex flex-col gap-4 flex-1 min-h-[200px]">
-                <div className="flex items-center gap-3 text-zinc-500">
-                    <StickyNote className="w-5 h-5" />
-                    <span className="type-label">Execution Log</span>
+                <div className="flex items-center justify-between text-zinc-500">
+                    <div className="flex items-center gap-3">
+                        <StickyNote className="w-5 h-5" />
+                        <span className="type-label">{t.logbook.execution_log}</span>
+                    </div>
                 </div>
-                <textarea 
-                    value={notesLocal}
-                    onChange={(e) => setNotesLocal(e.target.value)}
-                    placeholder="Log executing details, friction points, or outputs..."
-                    className="w-full flex-1 bg-zinc-950/30 border border-white/5 rounded-[2rem] p-6 type-body focus:border-white/10 outline-none resize-none placeholder-zinc-700 text-zinc-300 leading-relaxed custom-scrollbar"
-                />
+                
+                <div className="relative flex-1 bg-zinc-950/30 border border-white/5 rounded-[2rem] overflow-hidden group focus-within:border-white/10 transition-colors">
+                    <textarea 
+                        value={notesLocal}
+                        onChange={(e) => setNotesLocal(e.target.value)}
+                        placeholder={t.logbook.activity_placeholder}
+                        className="w-full h-full p-6 pb-24 bg-transparent border-none outline-none resize-none placeholder-zinc-700 text-zinc-300 leading-relaxed custom-scrollbar"
+                    />
+                    <MicButton target="ACTIVITY" />
+                </div>
             </div>
         </div>
     );
   };
 
   return (
-    // Updated padding: p-6 on mobile, p-10 on desktop.
     <div className="h-full bg-zinc-900/20 p-6 lg:p-10 overflow-y-auto custom-scrollbar w-full">
       <AnimatePresence mode="wait">
          <motion.div
