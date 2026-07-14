@@ -40,7 +40,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ nodeId: string; startX: number; startY: number; startMins: number; type: 'MOVE' | 'RESIZE_R' | 'RESIZE_L'; startDuration: number; } | null>(null);
-  const longPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Motion Values for Drag Scroll Tracking
   const scrollX = useMotionValue(0);
@@ -148,7 +147,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
       priority: false
     };
     setDraftActivities(prev => [...prev, newNode]);
-    setEditingNodeId(newNode.id);
     setContextMenu(null);
   };
 
@@ -158,18 +156,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     
     const node = draftActivities.find(n => n.id === nodeId);
     if (!node) return;
-
-    // Start Long Press Timer if Move (Mobile Only)
-    if (type === 'MOVE' && isMobile) {
-        longPressTimeout.current = setTimeout(() => {
-            setEditingNodeId(nodeId);
-            dragRef.current = null; // Cancel any drag
-            if (longPressTimeout.current) {
-                clearTimeout(longPressTimeout.current);
-                longPressTimeout.current = null;
-            }
-        }, 500);
-    }
 
     dragRef.current = { nodeId, startX: e.clientX, startY: e.clientY, startMins: timeToMinutes(node.startTime), startDuration: node.duration, type };
   };
@@ -181,11 +167,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
     
     const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
     
-    if (dist > 5 && longPressTimeout.current) {
-        clearTimeout(longPressTimeout.current);
-        longPressTimeout.current = null;
-    }
-
     e.stopPropagation();
     
     const deltaPx = isMobile ? (e.clientY - startY) : (e.clientX - startX);
@@ -209,15 +190,10 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (longPressTimeout.current) {
-        clearTimeout(longPressTimeout.current);
-        longPressTimeout.current = null;
-    }
-    
     if (dragRef.current) {
       const { nodeId, startX, startY, type } = dragRef.current;
       
-      if (!isMobile && type === 'MOVE') {
+      if (type === 'MOVE') {
           const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
           if (dist < 5) {
               setEditingNodeId(nodeId);
@@ -287,7 +263,13 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
   const canvasSize = (TOTAL_MINUTES * pixelsPerMinute) + (isMobile ? 400 : 0); 
 
   return (
-    <div className="fixed inset-0 bg-black z-[150] flex flex-col overflow-hidden select-none pb-safe">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 20 }}
+      transition={{ duration: 0.3, ease: "easeInOut" }}
+      className="fixed inset-0 bg-black z-[150] flex flex-col overflow-hidden select-none pb-safe"
+    >
       {/* Editor Header */}
       <div className="flex items-center justify-between px-6 h-32 border-b border-white/5 bg-zinc-950 z-50 shrink-0">
         <div className="flex items-center gap-6 flex-1 min-w-0">
@@ -374,7 +356,7 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
                   onPointerDown={(e) => handlePointerDown(e, node.id, 'MOVE')}
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setEditingNodeId(node.id); }}
                   className={`absolute rounded-[1.5rem] border flex flex-col p-6 cursor-grab overflow-hidden group ${isEditing ? 'z-30 ring-2 ring-cyan-500 bg-zinc-900 shadow-xl' : 'z-20 bg-zinc-900/60'}`}
                   style={{ 
                     [isMobile ? 'top' : 'left']: pos,
@@ -432,33 +414,28 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
         
       {/* Dock (Left Menu on Desktop, Bottom on Mobile) */}
       {/* HIDDEN WHEN EDITING TO PREVENT Z-INDEX ISSUES */}
-      <AnimatePresence>
-        {!editingNodeId && (
-            <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className={`absolute z-[160] flex gap-6 pointer-events-auto ${isMobile ? 'bottom-8 left-0 right-0 justify-center' : 'left-6 top-1/2 -translate-y-1/2 flex-col'}`}
-            >
-                {(['BURN', 'FUEL', 'REST', 'VOID'] as SlotType[]).map(type => (
-                    <motion.div 
-                    key={type} 
-                    drag 
-                    dragMomentum={false}
-                    dragElastic={0}
-                    dragTransition={{ power: 0, timeConstant: 0 }} 
-                    dragSnapToOrigin 
-                    onDragEnd={(e, info) => handleDockDragEnd(e, info, type)}
-                    whileDrag={{ scale: 1.1, zIndex: 999 }}
-                    className={`${isMobile ? 'w-28 h-28 rounded-2xl' : 'w-44 h-44 rounded-xl'} bg-zinc-900/90 backdrop-blur border border-white/10 flex flex-col items-center justify-center gap-3 cursor-grab shadow-lg hover:border-white/20 hover:scale-105`}
-                    >
-                        <div className="w-4 h-4 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: COLORS[type], color: COLORS[type] }} />
-                        <span className="type-label text-zinc-500">{type}</span>
-                    </motion.div>
-                ))}
-            </motion.div>
-        )}
-      </AnimatePresence>
+      <div 
+          className={`absolute z-[160] flex gap-6 pointer-events-auto transition-all duration-300 ${
+            editingNodeId ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-100 translate-y-0'
+          } ${isMobile ? 'bottom-8 left-0 right-0 justify-center' : 'left-6 top-1/2 -translate-y-1/2 flex-col'}`}
+      >
+          {(['BURN', 'FUEL', 'REST', 'VOID'] as SlotType[]).map(type => (
+              <motion.div 
+              key={type} 
+              drag 
+              dragMomentum={false}
+              dragElastic={0}
+              dragTransition={{ power: 0, timeConstant: 0 }} 
+              dragSnapToOrigin 
+              onDragEnd={(e, info) => handleDockDragEnd(e, info, type)}
+              whileDrag={{ scale: 1.1, zIndex: 999 }}
+              className={`${isMobile ? 'w-28 h-28 rounded-2xl' : 'w-44 h-44 rounded-xl'} bg-zinc-900/90 backdrop-blur border border-white/10 flex flex-col items-center justify-center gap-3 cursor-grab shadow-lg hover:border-white/20 hover:scale-105`}
+              >
+                  <div className="w-4 h-4 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: COLORS[type], color: COLORS[type] }} />
+                  <span className="type-label text-zinc-500">{type}</span>
+              </motion.div>
+          ))}
+      </div>
 
       {/* Context Menu */}
       <AnimatePresence>
@@ -506,6 +483,6 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ initialProtocol,
         confirmLabel="Delete"
         isDangerous
       />
-    </div>
+    </motion.div>
   );
 };

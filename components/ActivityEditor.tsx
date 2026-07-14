@@ -82,15 +82,24 @@ export const ActivityEditor: React.FC<ActivityEditorProps> = ({
   // Live Update for Panel Mode
   useEffect(() => {
      if (mode === 'panel' && isOpen && data.title && data.startTime) {
+         // Prevent saving if data perfectly matches initialActivity to avoid infinite loop
+         const isUnchanged = initialActivity && 
+           data.title === initialActivity.title &&
+           data.startTime === initialActivity.startTime &&
+           data.duration === initialActivity.duration &&
+           data.type === initialActivity.type &&
+           data.priority === initialActivity.priority &&
+           JSON.stringify(data.tags || []) === JSON.stringify(initialActivity.tags || []);
+
+         if (isUnchanged) return;
+
          // Debounce live updates so we don't spam state
          const timer = setTimeout(() => {
-             // We pass a flag or just call onSave without closing
-             // Note: ProtocolEditor needs to handle this update without closing the selection
              onSave(data as ActivityDefinition);
          }, 100);
          return () => clearTimeout(timer);
      }
-  }, [data, mode, isOpen]);
+  }, [data, mode, isOpen, initialActivity]);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();

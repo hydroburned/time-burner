@@ -1,5 +1,6 @@
 {
   "name": "Time Burner",
   "description": "A minimalist, local-first productivity app for biohackers and high-performance individuals. Fuel your body, burn your energy in deep work, and maintain perfect balance.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": []
 }

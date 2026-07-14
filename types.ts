@@ -106,6 +106,7 @@ export interface AppState {
   
   // Assignment & Forking
   applyProtocolToDay: (date: string, protocolId: string) => void;
+  applyProtocolToDays: (dates: string[], protocolId: string) => void;
   detachProtocolForDay: (date: string) => void; // New: Creates a custom instance
   
   // User

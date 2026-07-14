@@ -13,6 +13,8 @@ export const MonthView: React.FC = () => {
   const { setSelectedDate, setView, days, protocols, userConfig } = useStore();
   const [menuState, setMenuState] = useState<{ dateId: string; x: number; y: number } | null>(null);
   const [viewDate, setViewDate] = useState(new Date());
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const t = useTranslation();
 
   const year = viewDate.getFullYear();
@@ -61,6 +63,23 @@ export const MonthView: React.FC = () => {
     e.preventDefault();
     setMenuState({ dateId: id, x: e.clientX, y: e.clientY });
   };
+
+  const handleDayClick = (id: string, isCurrentMonth: boolean) => {
+    if (isBulkMode) {
+      if (!isCurrentMonth) return; // Only allow selecting current month days to avoid confusion
+      setSelectedDays(prev => 
+        prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
+      );
+    } else {
+      setSelectedDate(id);
+      setView('DAY');
+    }
+  };
+
+  const handleBulkAssign = (e: React.MouseEvent) => {
+    if (selectedDays.length === 0) return;
+    setMenuState({ dateId: 'bulk', x: e.clientX, y: e.clientY });
+  };
   
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
   const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
@@ -81,10 +100,43 @@ export const MonthView: React.FC = () => {
             <p className="type-label text-zinc-500">{t.views.temporal_grid}</p>
         </div>
         
-        <div className="flex gap-4">
-             <Button variant="secondary" size="icon" onClick={prevMonth} icon={<ChevronLeft />} />
-             <Button variant="secondary" size="md" onClick={jumpToToday}>{t.common.today}</Button>
-             <Button variant="secondary" size="icon" onClick={nextMonth} icon={<ChevronRight />} />
+        <div className="flex gap-4 items-center">
+             {isBulkMode ? (
+               <>
+                 <Button 
+                   variant="ghost" size="md" 
+                   onClick={(e) => { e.stopPropagation(); setIsBulkMode(false); setSelectedDays([]); }}
+                 >
+                   Cancel
+                 </Button>
+                 <Button 
+                   variant="secondary" size="md" 
+                   onClick={(e) => { e.stopPropagation(); setSelectedDays(calendarDays.filter(d => d.isCurrentMonth).map(d => getDayId(d.date))); }}
+                 >
+                   Select All
+                 </Button>
+                 <Button 
+                   variant="primary" size="md" 
+                   onClick={(e) => { e.stopPropagation(); handleBulkAssign(e); }}
+                   disabled={selectedDays.length === 0}
+                 >
+                   Assign ({selectedDays.length})
+                 </Button>
+               </>
+             ) : (
+               <>
+                 <Button 
+                   variant="secondary" size="md" icon={<BookTemplate />} 
+                   onClick={(e) => { e.stopPropagation(); setIsBulkMode(true); }} 
+                   className="hidden md:flex"
+                 >
+                   Bulk Assign
+                 </Button>
+                 <Button variant="secondary" size="icon" onClick={prevMonth} icon={<ChevronLeft />} />
+                 <Button variant="secondary" size="md" onClick={jumpToToday}>{t.common.today}</Button>
+                 <Button variant="secondary" size="icon" onClick={nextMonth} icon={<ChevronRight />} />
+               </>
+             )}
         </div>
       </div>
 
@@ -101,29 +153,29 @@ export const MonthView: React.FC = () => {
           const isToday = id === todayId;
           const computedActivities = getComputedActivities(days, protocols, id);
           const isEmpty = computedActivities.length === 0;
+          const isSelected = selectedDays.includes(id);
           
           return (
             <motion.div
               key={`${id}-${i}`}
-              onClick={() => {
-                setSelectedDate(id);
-                setView('DAY');
-              }}
+              onClick={() => handleDayClick(id, isCurrentMonth)}
               onContextMenu={(e) => handleContextMenu(e, id)}
               // Increased height: h-48 sm:h-56
-              className={`group relative h-48 sm:h-56 p-6 flex flex-col justify-between cursor-pointer transition-colors hover:bg-white/5 ${
-                !isCurrentMonth ? 'bg-zinc-950/50' : 'bg-zinc-900'
-              } ${isToday ? 'ring-inset ring-2 ring-cyan-500/50' : ''}`}
+              className={`group relative h-48 sm:h-56 p-6 flex flex-col justify-between cursor-pointer transition-colors ${
+                isBulkMode 
+                  ? isSelected ? 'bg-cyan-900/40 ring-inset ring-2 ring-cyan-500' : isCurrentMonth ? 'bg-zinc-900 opacity-50 hover:opacity-100' : 'bg-zinc-950/20 opacity-20'
+                  : !isCurrentMonth ? 'bg-zinc-950/50 hover:bg-white/5' : 'bg-zinc-900 hover:bg-white/5'
+              } ${isToday && !isBulkMode ? 'ring-inset ring-2 ring-cyan-500/50' : ''}`}
             >
               <div className="flex justify-between items-start z-10 mb-4 relative">
                 <span className={`type-mono-body tabular-nums ${
-                    isToday ? 'text-cyan-400' : isCurrentMonth ? 'text-zinc-400' : 'text-zinc-700'
+                    isToday || isSelected ? 'text-cyan-400' : isCurrentMonth ? 'text-zinc-400' : 'text-zinc-700'
                 }`}>
                   {date.getDate().toString().padStart(2, '0')}
                 </span>
                 
                 {/* ACTION BUTTON (Only valid if current month or relevant) */}
-                {isCurrentMonth && (
+                {isCurrentMonth && !isBulkMode && (
                     <button 
                         onClick={(e) => handleActionClick(e, id)}
                         className={`absolute top-0 right-0 p-2 lg:p-3 rounded-full border transition-all z-20 md:opacity-0 md:group-hover:opacity-100 ${
@@ -147,9 +199,16 @@ export const MonthView: React.FC = () => {
 
       <ProtocolContextMenu 
         isOpen={!!menuState} 
-        onClose={() => setMenuState(null)} 
+        onClose={() => {
+            setMenuState(null);
+            if (isBulkMode) {
+                setIsBulkMode(false);
+                setSelectedDays([]);
+            }
+        }} 
         targetDate={menuState?.dateId || ''} 
         coords={menuState ? { x: menuState.x, y: menuState.y } : null} 
+        selectedDays={selectedDays}
       />
     </div>
   );

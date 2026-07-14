@@ -7,6 +7,7 @@ import {
   PenLine,
   Copy
 } from 'lucide-react';
+import { motion, AnimatePresence } from "framer-motion";
 import { Protocol } from '../../types';
 import { Button } from '../UI';
 import { ProtocolEditor } from './ProtocolEditor';
@@ -78,19 +79,20 @@ export const ProtocolManager: React.FC = () => {
     setEditorState({ isOpen: false, protocol: null });
   };
 
-  if (editorState.isOpen) {
-    return (
-      <ProtocolEditor 
-        initialProtocol={editorState.protocol}
-        onClose={closeEditor}
-      />
-    );
-  }
-
   return (
-    <div className="w-full max-w-[1920px] mx-auto py-20 px-8 lg:px-20">
-      {/* Header: Use type-h1 to prevent massive "Display" font size breaking one-line rule */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
+    <AnimatePresence mode="wait">
+      {editorState.isOpen ? (
+        <motion.div key="editor" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full">
+          <ProtocolEditor 
+            initialProtocol={editorState.protocol}
+            onClose={closeEditor}
+          />
+        </motion.div>
+      ) : (
+        <motion.div key="library" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full">
+          <div className="w-full max-w-[1920px] mx-auto py-20 px-8 lg:px-20">
+            {/* Header: Use type-h1 to prevent massive "Display" font size breaking one-line rule */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
         <div>
           <h2 className="type-h1 mb-4 text-white">{t.protocol.library}</h2>
           <p className="type-label text-zinc-500">{t.protocol.manage}</p>
@@ -116,7 +118,7 @@ export const ProtocolManager: React.FC = () => {
                       {protocol.name}
                     </h3>
                     <span className="type-mono-body text-zinc-500 block tabular-nums">
-                      {protocol.activities.length} {t.protocol.phases} • {Math.round(protocol.activities.reduce((acc, curr) => acc + curr.duration, 0) / 60)} {t.protocol.hours}
+                      {protocol.activities?.length || 0} {t.protocol.phases} • {Math.round((protocol.activities || []).reduce((acc, curr) => acc + (curr.duration || 0), 0) / 60)} {t.protocol.hours}
                     </span>
                   </div>
 
@@ -166,5 +168,8 @@ export const ProtocolManager: React.FC = () => {
         isDangerous
       />
     </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

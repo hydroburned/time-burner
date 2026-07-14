@@ -7,10 +7,13 @@ import { MiniTimeline } from '../MiniTimeline';
 import { BookTemplate, RefreshCw, Plus } from 'lucide-react';
 import { ProtocolContextMenu } from '../ProtocolContextMenu';
 import { useTranslation } from '../../hooks/useTranslation';
+import { Button } from '../UI';
 
 export const WeekView: React.FC = () => {
-  const { setSelectedDate, setView, days, protocols, userConfig } = useStore();
+  const { setSelectedDate, setView, days, protocols, userConfig, applyProtocolToDays } = useStore();
   const [menuState, setMenuState] = useState<{ dateId: string; x: number; y: number } | null>(null);
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const t = useTranslation();
   
   const horizonDays = React.useMemo(() => {
@@ -36,19 +39,67 @@ export const WeekView: React.FC = () => {
     e.preventDefault();
     setMenuState({ dateId: id, x: e.clientX, y: e.clientY });
   };
-  
+
+  const handleDayClick = (id: string) => {
+    if (isBulkMode) {
+      setSelectedDays(prev => 
+        prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
+      );
+    } else {
+      setSelectedDate(id);
+      setView('DAY');
+    }
+  };
+
+  const handleBulkAssign = (e: React.MouseEvent) => {
+    if (selectedDays.length === 0) return;
+    // Pass a special 'bulk' targetDate
+    setMenuState({ dateId: 'bulk', x: e.clientX, y: e.clientY });
+  };
+
   const lang = userConfig.language === 'ru' ? 'ru-RU' : 'en-US';
 
   return (
-    // CHANGED: Added flex flex-col and pb-40 (80px) to outer container to handle layout and spacing
     <div className="w-full max-w-[1920px] mx-auto pt-20 px-8 lg:px-20 min-h-full flex flex-col pb-40" onClick={() => setMenuState(null)}>
-      {/* Unified Header Style: Left Aligned */}
-      <div className="mb-8 lg:mb-12 text-left shrink-0">
-        <h2 className="type-h1 lg:type-display mb-4 text-white">{t.views.day_horizon}</h2>
-        <p className="type-label text-zinc-500">{t.views.neural_pipeline}</p>
+      <div className="mb-8 lg:mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6 shrink-0">
+        <div>
+          <h2 className="type-h1 lg:type-display mb-4 text-white">{t.views.day_horizon}</h2>
+          <p className="type-label text-zinc-500">{t.views.neural_pipeline}</p>
+        </div>
+        <div className="flex gap-4 items-center">
+          {isBulkMode ? (
+            <>
+              <Button 
+                variant="ghost" size="md" 
+                onClick={(e) => { e.stopPropagation(); setIsBulkMode(false); setSelectedDays([]); }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="secondary" size="md" 
+                onClick={(e) => { e.stopPropagation(); setSelectedDays(horizonDays.map(d => getDayId(d))); }}
+              >
+                Select All
+              </Button>
+              <Button 
+                variant="primary" size="md" 
+                onClick={(e) => { e.stopPropagation(); handleBulkAssign(e); }}
+                disabled={selectedDays.length === 0}
+              >
+                Assign ({selectedDays.length})
+              </Button>
+            </>
+          ) : (
+            <Button 
+              variant="secondary" size="md" icon={<BookTemplate />}
+              onClick={(e) => { e.stopPropagation(); setIsBulkMode(true); }}
+            >
+              Bulk Assign
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Grid: Added flex-1 to fill remaining space, removed pb-40 from here */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 flex-1">
         {horizonDays.map((date, i) => {
           const id = getDayId(date);
@@ -56,6 +107,7 @@ export const WeekView: React.FC = () => {
           const todayId = getDayId(new Date());
           const isToday = id === todayId;
           const isEmpty = computedActivities.length === 0;
+          const isSelected = selectedDays.includes(id);
 
           return (
             <motion.div
@@ -63,36 +115,34 @@ export const WeekView: React.FC = () => {
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04 }}
-              onClick={() => {
-                setSelectedDate(id);
-                setView('DAY');
-              }}
+              onClick={() => handleDayClick(id)}
               onContextMenu={(e) => handleContextMenu(e, id)}
-              // Styles: min-h-[240px] kept as safe minimum, h-full allows stretching
               className={`group relative flex flex-col items-center h-full min-h-[240px] p-6 lg:p-8 rounded-[3rem] border transition-all overflow-hidden cursor-pointer ${
-                isToday 
-                  ? 'bg-zinc-900 border-cyan-500/40 shadow-[0_0_60px_rgba(6,182,212,0.1)] scale-105 z-10' 
-                  : 'bg-zinc-900/40 border-white/5 hover:border-white/10 hover:bg-zinc-900/60'
+                isBulkMode 
+                  ? isSelected ? 'bg-cyan-900/20 border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.2)]' : 'bg-zinc-900/40 border-white/5 opacity-50 hover:opacity-100'
+                  : isToday 
+                    ? 'bg-zinc-900 border-cyan-500/40 shadow-[0_0_60px_rgba(6,182,212,0.1)] scale-105 z-10' 
+                    : 'bg-zinc-900/40 border-white/5 hover:border-white/10 hover:bg-zinc-900/60'
               }`}
             >
-              {/* MOBILE TOP-RIGHT ACTION BUTTON (Hidden on Desktop) */}
-              <button
-                    onClick={(e) => handleSetup(e, id)}
-                    className={`md:hidden absolute top-6 right-6 p-3 rounded-full border transition-all z-20 ${
-                        isEmpty 
-                        ? 'bg-zinc-800 border-white/10 text-zinc-400' 
-                        : 'bg-zinc-900/80 border-white/5 text-zinc-600'
-                    }`}
-                >
-                    {isEmpty ? <Plus className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
-              </button>
+              {!isBulkMode && (
+                <button
+                      onClick={(e) => handleSetup(e, id)}
+                      className={`md:hidden absolute top-6 right-6 p-3 rounded-full border transition-all z-20 ${
+                          isEmpty 
+                          ? 'bg-zinc-800 border-white/10 text-zinc-400' 
+                          : 'bg-zinc-900/80 border-white/5 text-zinc-600'
+                      }`}
+                  >
+                      {isEmpty ? <Plus className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
+                </button>
+              )}
 
               <div className="text-center relative z-10 pointer-events-none mt-2 lg:mt-6">
                 <span className={`type-h3 block mb-4 uppercase ${isToday ? 'text-cyan-400' : 'text-zinc-600'}`}>
                   {date.toLocaleDateString(lang, { weekday: 'short' })}
                 </span>
-                {/* Smaller Date Number - type-mono-display (48px) */}
-                <span className={`type-mono-display leading-none tabular-nums ${isToday ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
+                <span className={`type-mono-display leading-none tabular-nums ${isToday || isSelected ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
                   {date.getDate()}
                 </span>
                 
@@ -106,22 +156,22 @@ export const WeekView: React.FC = () => {
                 )}
               </div>
 
-              {/* DESKTOP BOTTOM ACTION BUTTON (Hidden on Mobile) */}
-              <div className="flex-1 w-full flex items-end justify-center relative z-10 mt-auto pb-8 hidden md:flex">
-                   <motion.button 
-                    onClick={(e) => handleSetup(e, id)}
-                    className={`flex items-center gap-3 px-8 py-4 rounded-2xl border transition-all shadow-lg ${
-                      isEmpty 
-                        ? 'bg-zinc-800 border-white/10 text-zinc-300 hover:text-white hover:bg-zinc-700' 
-                        : 'bg-zinc-900/50 border-white/5 text-zinc-500 hover:text-white hover:bg-zinc-800'
-                    }`}
-                  >
-                    {isEmpty ? <BookTemplate className="w-6 h-6" /> : <RefreshCw className="w-6 h-6" />}
-                    <span className="type-body font-bold">{isEmpty ? t.protocol.assign : t.views.change}</span>
-                  </motion.button>
-              </div>
+              {!isBulkMode && (
+                <div className="flex-1 w-full flex items-end justify-center relative z-10 mt-auto pb-8 hidden md:flex">
+                     <motion.button 
+                      onClick={(e) => handleSetup(e, id)}
+                      className={`flex items-center gap-3 px-8 py-4 rounded-2xl border transition-all shadow-lg ${
+                        isEmpty 
+                          ? 'bg-zinc-800 border-white/10 text-zinc-300 hover:text-white hover:bg-zinc-700' 
+                          : 'bg-zinc-900/50 border-white/5 text-zinc-500 hover:text-white hover:bg-zinc-800'
+                      }`}
+                    >
+                      {isEmpty ? <BookTemplate className="w-6 h-6" /> : <RefreshCw className="w-6 h-6" />}
+                      <span className="type-body font-bold">{isEmpty ? t.protocol.assign : t.views.change}</span>
+                    </motion.button>
+                </div>
+              )}
 
-              {/* INCREASED PADDING: pt-10 and pb-6 for timeline block */}
               <div className="w-full relative z-10 pt-10 pb-6 border-t border-white/5 mt-auto">
                 <MiniTimeline activities={computedActivities} />
               </div>
@@ -132,9 +182,16 @@ export const WeekView: React.FC = () => {
       
       <ProtocolContextMenu 
         isOpen={!!menuState} 
-        onClose={() => setMenuState(null)} 
+        onClose={() => {
+            setMenuState(null);
+            if (isBulkMode) {
+                setIsBulkMode(false);
+                setSelectedDays([]);
+            }
+        }} 
         targetDate={menuState?.dateId || ''}
         coords={menuState ? { x: menuState.x, y: menuState.y } : null}
+        selectedDays={selectedDays}
       />
     </div>
   );

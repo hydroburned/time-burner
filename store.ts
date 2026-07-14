@@ -161,7 +161,7 @@ export const useStore = create<ExtendedAppState>()(
           const day = state.days[date];
           if (!day) return state;
 
-          const currentLog = day.activityLogs[activityId] || { notes: '', checklist: [] };
+          const currentLog = day.activityLogs?.[activityId] || { notes: '', checklist: [] };
           
           return {
             days: {
@@ -303,6 +303,28 @@ export const useStore = create<ExtendedAppState>()(
 
       // --- ASSIGNMENT & FORKING ---
 
+      applyProtocolToDays: (dates: string[], protocolId: string) => {
+        set(state => {
+           const newDays = { ...state.days };
+           dates.forEach(date => {
+             const existingDay = state.days[date] || { 
+               date, 
+               protocolId: '', 
+               completedActivityIds: [], 
+               activityLogs: {}, 
+               dailyNote: '',
+               dailyChecklist: []
+             };
+             newDays[date] = { 
+               ...existingDay,
+               protocolId, 
+               completedActivityIds: [] 
+             };
+           });
+           return { days: newDays };
+        });
+        get().updateEnergy();
+      },
       applyProtocolToDay: (date: string, protocolId: string) => {
         set(state => {
            // Ensure we create a new day object reference

@@ -60,11 +60,11 @@ export const getComputedActivities = (
        const currentDayActivities = protocol.activities
          .filter(def => def && def.id && typeof def.startTime === 'string')
          .map(def => {
-           const log = dayState.activityLogs[def.id];
+           const log = dayState.activityLogs?.[def.id];
            return {
              ...def,
              completed: completedIds.has(def.id),
-             hasNotes: !!(log && (log.notes.trim().length > 0 || log.checklist.length > 0))
+             hasNotes: !!(log && ((log.notes && log.notes.trim().length > 0) || (log.checklist && log.checklist.length > 0)))
            };
          });
        

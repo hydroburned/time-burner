@@ -425,7 +425,6 @@ const App: React.FC = () => {
         key="day-view"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
         className="flex flex-row h-full overflow-hidden w-full gap-0"
       >
         <div className="flex flex-col relative z-10 w-[50rem] shrink-0 h-full py-12 bg-transparent justify-between border-r border-white/5">

@@ -8,28 +8,37 @@ import { useTranslation } from '../hooks/useTranslation';
 interface ProtocolContextMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  targetDate: string;
+  targetDate: string; // 'bulk' if bulk assign mode
   coords: { x: number; y: number } | null;
+  selectedDays?: string[];
 }
 
-export const ProtocolContextMenu: React.FC<ProtocolContextMenuProps> = ({ isOpen, onClose, targetDate, coords }) => {
-  const { protocols, days, applyProtocolToDay, setView, detachProtocolForDay } = useStore();
+export const ProtocolContextMenu: React.FC<ProtocolContextMenuProps> = ({ isOpen, onClose, targetDate, coords, selectedDays }) => {
+  const { protocols, days, applyProtocolToDay, applyProtocolToDays, setView, detachProtocolForDay } = useStore();
   const t = useTranslation();
   
-  const currentProtocolId = days[targetDate]?.protocolId;
-  const currentProtocol = protocols.find(p => p.id === currentProtocolId);
+  const isBulk = targetDate === 'bulk';
+  // If bulk mode, we don't have a single current protocol
+  const currentProtocolId = isBulk ? null : days[targetDate]?.protocolId;
+  const currentProtocol = currentProtocolId ? protocols.find(p => p.id === currentProtocolId) : null;
   // Only show library protocols or if currently no protocol
   const visibleProtocols = protocols.filter(p => !p.isCustom);
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
 
   const handleSelect = (protocolId: string) => {
-    applyProtocolToDay(targetDate, protocolId);
+    if (isBulk && selectedDays) {
+      applyProtocolToDays(selectedDays, protocolId);
+    } else {
+      applyProtocolToDay(targetDate, protocolId);
+    }
     onClose();
   };
   
   const handleDetach = () => {
-      detachProtocolForDay(targetDate);
+      if (!isBulk) {
+        detachProtocolForDay(targetDate);
+      }
       onClose();
   };
 
